@@ -6,7 +6,7 @@ import lfsengine
 import stat
 import os    
 
-from os.path import realpath,isfile,isdir,basename,dirname,join,exists,normpath
+from os.path import realpath,isfile,isdir,basename,dirname,join,exists,normpath,expanduser
 import errno
 import sys
 from threading import RLock
@@ -56,7 +56,7 @@ def usage():
 
 class LabelFs(Fuse):
   def __init__(self, *args, **kw):
-    self.lfsdb = "/tmp/lfs.db"
+    self.lfsdb = "%s/.lfs.db" % expanduser('~')
     Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
     self.flags = 0
     self.multithreaded = True
