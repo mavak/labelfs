@@ -18,7 +18,7 @@ fuse.fuse_python_api = (0, 2)
 # Fa falta tindre algo més en compte a l'hora de fer relacions que la posicio? el temps? grau d'afinitat?
 # quan se crea un node la part "1 - " del nom fa que automàticament se cree la etiqueta "`1` + " - " + pathlist[-1]" i s'apega al node, a aquesta etiqueta se li apega pathlist[-1]. El node s'ha de crear sense el "1 - "
 
-# eliminar lfs-store, *com a molt utilitzarlo per a guardar els shelves (com a collections o biblioteques...). Quan se cree un "fitxer" en el engine se guardarà la url, i es la que usarem com a path.
+# eliminar lfs-store, *com a molt utilitzarlo per a guardar els shelves (com a collections o biblioteques...). Quan se cree un "fitxer" en el engine se guardarà la uri, i es la que usarem com a path.
 
 
 
@@ -32,7 +32,7 @@ def usage():
   
   USAGE (command line):
   
-    {prog} [-f] [-d] -o storedir=<storedir> <mp>
+    {prog} [-f] [-d] -o lfsdb=<lfsdb> <mp>
   
   USAGE (fstab):
   
@@ -40,7 +40,7 @@ def usage():
   
   PARAMETERS:
   
-    storedir: directory holding files and 'folders' 
+    lfs-db: lfs database file 
     mp: mount point
     options: labelfs-specific options
     -f: no-fork mode
@@ -56,14 +56,14 @@ def usage():
 
 class LabelFs(Fuse):
   def __init__(self, *args, **kw):
-    self.storedir = "/tmp"
+    self.lfsdb = "/tmp/lfs.db"
     Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
     self.flags = 0
     self.multithreaded = True
-    self.parser.add_option(mountopt="storedir", metavar="PATH", default=self.storedir, help="use filesystem from under PATH [default:  default]")
+    self.parser.add_option(mountopt="lfsdb", metavar="PATH", default=self.lfsdb, help="use filesystem from under PATH [default:  default]")
     self.parse(values=self, errex=1)
-    self.le = lfsengine.LabelEngine(self.storedir + "/lfs.shelve")
-
+    self.lfsdbdir = dirname(self.lfsdb)
+    self.le = lfsengine.LabelEngine(self.lfsdb)
     
   def main(self, *a, **kw):
     self.file_class = self.LabelFsFile
@@ -78,25 +78,29 @@ class LabelFs(Fuse):
       if path.find('+')>-1 or path.find('-')>-1:
         return -errno.ENOENT
       else:
-        return os.lstat("%s" % (self.storedir))
+        return os.lstat("%s" % (self.lfsdb))
     bn = basename(path)
     if bn != '':
       pl = self.pathlist(path)
       lenpl = len(pl)
-      if lenpl == 1:
-        le_query = '"%s" & ^<#*' % bn
-      else:
-        pl.reverse()
-        le_query = '#"%s"%s' % ('"& <[#"'.join(pl),']'*(lenpl-1))
-        if self.le.exists_node(bn,lfsengine.TYPE_FILE):
+      le_query = '"%s" & ^<#*' % bn
+      pl.reverse()
+      if self.le.exists_node(bn,lfsengine.TYPE_LABEL):
+        if lenpl > 1:
+          le_query = '#"%s"%s' % ('"& <[#"'.join(pl),']'*(lenpl-1))
+        for node in self.le.query(le_query):
+          return os.lstat(self.lfsdbdir)
+      elif self.le.exists_node(bn,lfsengine.TYPE_FILE):
+        if lenpl > 1:
           le_query = '~"%s" & <"%s"' % (bn,'" & <"'.join(pl[1:]))  
-      nodes = [node for node in self.le.query(le_query)]
-      if not nodes:
-        return -errno.ENOENT
-    return os.lstat("%s/%s" % (self.storedir,bn))
+        for node in self.le.query(le_query):
+          if 'uri' in node:
+            return os.lstat(node['uri'])
+      return -errno.ENOENT
+    return os.lstat(self.lfsdbdir)
 
   def statfs(self):
-    return os.statvfs(self.storedir)
+    return os.statvfs(self.lfsdb)
   
   def readdir (self, path, offset):
     dirents = [ '.', '..' ]
@@ -116,48 +120,60 @@ class LabelFs(Fuse):
       yield fuse.Direntry(r)
       
   def access(self, path, mode):
-    if not os.access("%s/%s" % (self.storedir,basename(path)), mode):
-      return -errno.EACCES
+    uri = ""
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        if not os.access(node['uri'], mode):
+          return -errno.EACCES
   
   def open (self, path, flags):
-    return self.LabelFsFile("%s/%s" % (self.storedir,basename(path)), flags)
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        return self.LabelFsFile(node['uri'], flags)
       
   def readlink(self, path):
-    return os.readlink("%s/%s" % (self.storedir,basename(path)))
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        return os.readlink(node['uri'])
   
   def mknod(self, path, mode, dev):
     bn = basename(path)
     dl = self.pathlist(dirname(path))
-    self.le.create_file(bn)
+    uri = "%s/%s" % (self.lfsdbdir,bn)
+    self.le.create_file(bn,uri)
     if len(dl)>0:
       le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
       self.le.execute(le_query)
-    os.mknod("%s/%s" % (self.storedir,basename(path)), mode, dev)
+    os.mknod(uri, mode, dev)
     
   def create (self, path, fi_flags, mode):
     bn = basename(path)
     dl = self.pathlist(dirname(path))
-    self.le.create_file(bn)
+    uri = "%s/%s" % (self.lfsdbdir,bn)
+    self.le.create_file(bn,uri)
     if len(dl)>0:
       le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
       self.le.execute(le_query)
-    f = self.LabelFsFile("%s/%s" % (self.storedir,bn), fi_flags, mode)
+    f = self.LabelFsFile(uri, fi_flags, mode)
     return f
   
   def utime(self, path, times):
-    bn = basename(path)
-    os.utime("%s/%s" % (self.storedir,bn), times)
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        os.utime(node['uri'], times)
 
   def unlink(self, path):
     bn = basename(path)
+    #for node in self.le.query('"%s"' % bn):
+    #  if 'uri' in node:
+    #    if exists(node['uri']): 
+    #      os.unlink(node['uri'])
     self.le.delete_node(bn)
-    if exists("%s/%s" % (self.storedir,bn)): 
-      os.unlink("%s/%s" % (self.storedir,bn))
   
   def mkdir(self, path, mode):
-    exeprepos = path.find(EXECUTE_PREFIX)
-    if exeprepos>-1:
-       self.le.execute(path[exeprepos+EXECUTE_PREFIX_LEN:])
+    execute_prefix_position = path.find(EXECUTE_PREFIX)
+    if execute_prefix_position>-1:
+       self.le.execute(path[execute_prefix_position+EXECUTE_PREFIX_LEN:])
     else:
       bn = basename(path)
       dl = self.pathlist(dirname(path))
@@ -165,42 +181,26 @@ class LabelFs(Fuse):
       if len(dl)>0: 
         le_query = '+["%s"],["%s"]' % ('" | "'.join(dl[-1:]),bn)
         self.le.execute(le_query)
-      if not exists("%s/%s" % (self.storedir,bn)): 
-        os.mkdir("%s/%s" % (self.storedir,bn), mode)
       le_query = '+["%s"],[~<"%s"]' % ('" | "'.join(dl),bn)
       self.le.execute(le_query)
       
   def rmdir(self, path):
     bn = basename(path)
     self.le.delete_node(bn)
-    if exists("%s/%s" % (self.storedir,bn)):
-      os.rmdir("%s/%s" % (self.storedir,bn))
 
   def symlink(self, target, link):
     bn = basename(link)
     dl = self.pathlist(dirname(link))
     if isfile(target):
-      self.le.create_file(bn)
+      self.le.create_file(bn,target)
       if len(dl)>0:
         le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
         self.le.execute(le_query)
-      if not exists("%s/%s" % (self.storedir,bn)):
-        try:
-          os.link(target,"%s/%s" % (self.storedir,bn))
-        except OSError, ose:
-          pass
-        if not exists("%s/%s" % (self.storedir,bn)):
-          try:
-            os.symlink(target,"%s/%s" % (self.storedir,bn))
-          except OSError, ose:
-            pass
     else:
       for i in range(len(dl)): 
         self.le.create_label(dl[i])
         le_query = '+["%s"],["%s"]' % (dl[i-1],dl[i])
         self.le.execute('+["%s"],["%s"]' % ('" | "'.join(dl[:i]),dl[i]))
-        if not exists("%s/%s" % (self.storedir,dl[i])):
-          os.mkdir("%s/%s" % (self.storedir,dl[i]))
       flag_can_link = 1
       for r,d,fs in os.walk(target):
         rel = r.replace(target,"")
@@ -210,45 +210,29 @@ class LabelFs(Fuse):
           if i > 0:
             le_query = '+["%s"],["%s"]' % (dl[i-1],dl[i])
             self.le.execute(le_query)
-          if not exists("%s/%s" % (self.storedir,dl[i])): 
-            os.mkdir("%s/%s" % (self.storedir,dl[i]))
         for f in fs:
-          if not exists("%s/%s" % (self.storedir,f)):
-            self.le.create_file(f)
-            le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),f)
-            self.le.execute(le_query)
-            if not exists("%s/%s" % (self.storedir,f)):
-              if flag_can_link:
-                try:
-                  os.link("%s/%s" %(r,f),"%s/%s" % (self.storedir,f))
-                except OSError, ose:
-                  flag_can_link = 0
-              if not flag_can_link or not exists("%s/%s" % (self.storedir,f)):
-                try:
-                  os.symlink("%s/%s" %(r,f),"%s/%s" % (self.storedir,f))
-                except OSError, ose:
-                  pass
+          self.le.create_file(f,"%s/%s" % (r,f))
+          le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),f)
+          self.le.execute(le_query)
 
   def link(self, target, link):
     if isfile(link):
       bn = basename(link)
       dl = self.pathlist(dirname(link))
-      self.le.create_file(bn)
+      self.le.create_file(bn,target)
       if len(dl)>0:
-          le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
-          self.le.execute(le_query)
-      if not exists("%s/%s" % (self.storedir,bn)):
-        os.link(target,"%s/%s" % (self.storedir,bn))
+        le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
+        self.le.execute(le_query)
           
   def rename(self, old, new):
     oldbn = basename(old)
     newbn = basename(new)
-    exeprepos = newbn.find(EXECUTE_PREFIX)
-    if exeprepos>-1:
-      self.le.execute(newbn[exeprepos:])
+    execute_prefix_position = newbn.find(EXECUTE_PREFIX)
+    if execute_prefix_position>-1:
+      self.le.execute(newbn[execute_prefix_position:])
       self.le.delete_node(oldbn)
-      if exists("%s/%s" % (self.storedir,oldbn)): 
-        os.rmdir("%s/%s" % (self.storedir,oldbn))
+      if exists("%s/%s" % (self.lfsdb,oldbn)): 
+        os.rmdir("%s/%s" % (self.lfsdb,oldbn))
     else:
       olddn = dirname(old)
       newdn = dirname(new)
@@ -264,10 +248,10 @@ class LabelFs(Fuse):
           le_query = '+["%s"],["%s"] & +[>"%s"],["%s"] & +["%s"],[~<"%s"]' % ('" | "'.join(newdl[-1:]),newbn,oldbn,newbn,newbn,oldbn)
           self.le.execute(le_query)
           self.le.delete_node(oldbn)
-          os.rmdir("%s/%s" % (self.storedir,oldbn))
         else:
           self.le.rename_node(oldbn,newbn)
-          os.rename("%s/%s" % (self.storedir,oldbn), "%s/%s" % (self.storedir,newbn))
+          # !!Actualitzar les URL
+          # os.rename("%s/%s" % (self.lfsdb,oldbn), "%s/%s" % (self.lfsdb,newbn))
       if olddl != newdl:
         if newdn == '/':
           le_query = '-["%s"],["%s"]' % ('" | "'.join(olddl[-1:]),newbn)
@@ -281,15 +265,20 @@ class LabelFs(Fuse):
             self.le.execute(le_query)
 
   def chmod(self, path, mode):
-    os.chmod("%s/%s" % (self.storedir,basename(path)), mode)
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        os.chmod(node['uri'], mode)
 
   def chown(self, path, user, group):
-    os.chown("%s/%s" % (self.storedir,basename(path)), user, group)
+    for node in self.le.query('"%s"' % basename(path)):
+      if 'uri' in node:
+        os.chown(node['uri'], user, group)
 
   def truncate(self, path, lenght):
-    f = open("%s/%s" % (self.storedir,basename(path)), "a")
-    f.truncate(lenght)
-    f.close()
+    for node in self.le.query('"%s"' % basename(path)):  
+      f = open(node['uri'], "a")
+      f.truncate(lenght)
+      f.close()
   
   def fsinit (self, *args):
     self.asgid = int(self.asgid)
@@ -303,37 +292,17 @@ class LabelFs(Fuse):
   def fsdestroy (self, *args):
     return -errno.ENOSYS
   
-  def readHELL(self, path, length, offset):
-    print "reading.. file..."
-    print "mek"
-    fd=os.open(path)
-    self.lock.acquire()
-    try:
-      print "lseek ",fd
-      os.lseek(fd, offset, os.SEEK_SET)
-      print "os.read"
-      buf = os.read(fd, length)
-      return buf
-    finally:
-      self.lock.release()
-
   class LabelFsFile(object):
     def __init__(self, path, flags, *mode):
-      print "file __init__ ",path
       self.fd = os.open(path, flags)
       self.direct_io = 0
       self.keep_cache = 0
       self.lock = RLock()
-      print "file __initted__ ",path
       
     def read(self, length, offset):
-      print "reading.. file..."
-      print "mek"
       self.lock.acquire()
       try:
-        print "lseek ",self.fd
         os.lseek(self.fd, offset, os.SEEK_SET)
-        print "os.read"
         buf = os.read(self.fd, length)
         return buf
       finally:

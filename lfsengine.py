@@ -5,8 +5,9 @@ import atexit
 from fnmatch import fnmatch
 import errno
 import re
+import random
 
-# ./labelengine.py -d /lfs/dir "query"
+# ./labelengine.py -d lfs.db "query"
 
 TYPE_LABEL=0
 TYPE_FILE=1
@@ -288,7 +289,7 @@ class LabelEngine():
           return self.lfs['names'][name] # realment esta retornant el id
     return -1
   
-  #def get_url(self, name) # assumir type=FILE
+  #def get_uri(self, name) # assumir type=FILE
 
   def exists_node(self,name,tyype=-1):
     return self.getid(name,tyype)  in self.lfs['ids']
@@ -297,42 +298,47 @@ class LabelEngine():
     if name != "":
       if self.exists_node(name):
         return -errno.EEXIST
-      iid=len(self.lfs['ids'])
-      self.lfs['ids'][iid]={'name':name,'type':0}
+      iid=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
+      self.lfs['ids'][iid]={'name':name,'type':TYPE_LABEL}
       self.lfs['names'][name]=iid
       self.lfs['parents'][iid] = {}
       self.lfs['childs'][iid] = {}
       self.lfs['types'][TYPE_LABEL][iid] = 1
       return iid
 
-  def create_file(self,name):
+  def create_file(self,name,uri):
     if name!= "":
       if self.exists_node(name):
         return -errno.EEXIST
-      iid=len(self.lfs['ids'])
-      self.lfs['ids'][iid]={'name':name,'type':1, 'URL':"file:///"+name} #super TODO
+      iid=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
+      self.lfs['ids'][iid]={'name':name,'type':TYPE_FILE, 'uri':uri}
       self.lfs['names'][name]=iid
       self.lfs['parents'][iid] = {}
       self.lfs['types'][TYPE_FILE][iid] = 1
-      print "created file",name, iid
+      print "created file",name, iid, uri
       return iid
 
   def delete_node(self,name):
     nodeid = self.getid(name)
     if nodeid in self.lfs['ids']:
       del self.lfs['ids'][nodeid]
+      
       if nodeid in self.lfs['parents']:
         for parent in self.lfs['parents'][nodeid]: 
           del self.lfs['childs'][parent][nodeid]
-        del self.lfs['parents'][nodeid]      
+        del self.lfs['parents'][nodeid]
+        
       if nodeid in self.lfs['childs']:
         for child in self.lfs['childs'][nodeid]: 
           del self.lfs['parents'][child][nodeid]
         del self.lfs['childs'][nodeid]
+        
       if nodeid in self.lfs['types'][TYPE_LABEL]:
         del self.lfs['types'][TYPE_LABEL][nodeid]
+        
       if nodeid in self.lfs['types'][TYPE_FILE]:
         del self.lfs['types'][TYPE_FILE][nodeid]
+        
       if name in self.lfs['names']:
         del self.lfs['names'][name]
 
@@ -420,7 +426,7 @@ class LabelEngine():
 
   def printlfs(self):
     print "@#@ NODES @#@"
-    print self.lfs['ids']
+    print self.lfs
     print
     print "~&~ RELATIONS ~&~"
     print "      && PARENTS &&"
@@ -440,12 +446,16 @@ class LabelEngine():
 
 
   def empty_brain(self):
-    del self.lfs
+    self.lfs['ids'] = {}
+    self.lfs['names'] = {}
+    self.lfs['types'] = {TYPE_FILE : {},TYPE_LABEL : {}}
+    self.lfs['parents'] = {}
+    self.lfs['childs'] = {}
 
 def usage():
   print """
-  labelfs /home/gerard/store/dir 'query'
-  labelfs /home/gerard/store/dir --empty-brain
+  labelfs lfs.db 'query'
+  labelfs lfs.db --empty-brain
 """
 if __name__ == "__main__":    
   import os
@@ -453,7 +463,7 @@ if __name__ == "__main__":
   from os.path import isfile,isdir,dirname,basename
   if len(sys.argv)>1:
     if isdir(sys.argv[1]):
-      le = LabelEngine(sys.argv[1] + "/lfs.shelve")
+      le = LabelEngine(sys.argv[1])
   if len(sys.argv)>2:
     if sys.argv[2] == '--empty_brain':
       le.empty_brain()

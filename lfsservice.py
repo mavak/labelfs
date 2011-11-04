@@ -4,7 +4,7 @@ import lfsengine
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import urlparse
 
-le = lfsengine.LabelEngine("/home/gerard/lfs-store/lfs.shelve")
+le = lfsengine.LabelEngine("/home/gerard/lfs.db")
 
 class MyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
