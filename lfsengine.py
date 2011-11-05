@@ -8,6 +8,7 @@ import re
 import random
 
 # ./labelengine.py -d -o lfsdb=/path/to/lfs.db "query"
+# TODO save labels attached on a file into the xattr of this file
 
 TYPE_LABEL=0
 TYPE_FILE=1
@@ -39,12 +40,73 @@ rws = {
   ,'del'      : 'X'
    }
    
-   
-class LabelEngine():
+
+class LfsEngine():
   def __init__(self,*a,**kw):
+    self.NodeEngine = NodeEngine(a[0])
+
+  def query(self,le_query_str,offset=-1):
+    for r in self.NodeEngine._lfs_query(le_query_str):
+      yield r
+
+  def execute(self,le_query_str):
+    for r in self.NodeEngine._lfs_query(le_query_str):
+      pass
+    
+  def getid(self,name,tyype=-1):
+    return self.NodeEngine.getid(name,tyype)
+  
+  #def get_uri(self, name) # assumir type=FILE
+
+  def exists_node(self,name,tyype=-1):
+    return self.NodeEngine.exists_node(name,tyype)
+
+  def create_label(self,name):
+    return self.NodeEngine.create_label(name)
+
+  def create_file(self,name,uri):
+    return self.NodeEngine.create_file(name,uri)
+
+  def delete_node(self,name):
+    self.NodeEngine.delete_node(name)
+    
+  def rename_node(self,old_name,new_name):
+    self.NodeEngine.rename_node(old_name,new_name)
+
+  def exists_relation(self,parentid,childid):
+    return self.NodeEngine.exists_relation(parentid,childid)
+
+  def add_label_to_node(self,parent,child):
+    self.NodeEngine.add_label_to_node(parent,child)
+
+  def add_labels_to_node(self,parents,child):
+    self.NodeEngine.add_labels_to_node(parents,child)
+
+  def add_labels_to_nodes(self,parents,childs):
+    self.NodeEngine.add_labels_to_nodes(parents,childs)
+
+  def remove_label_from_node(self,parent,child):
+    self.NodeEngine.remove_label_from_node(parent,child)
+
+  def remove_labels_from_node(self,parents,child):
+    self.NodeEngine.remove_labels_from_node(parents,child)
+
+  def remove_labels_from_nodes(self,parents,childs):
+    self.NodeEngine.remove_labels_from_nodes(parents,childs)
+
+  def printlfs(self):
+    self.NodeEngine.printlfs()
+
+  def empty_brain(self):
+    self.NodeEngine.empty_brain()
+
+
+
+class NodeEngine():
+  def __init__(self,lfsdb_file):
     lfs={}
     try:
-      lfs = shelve.open(a[0],writeback=True)
+      lfs = shelve.open(lfsdb_file,writeback=True)
       atexit.register(lfs.close)
     except:
       print "cannot shelve.open",a[0]
@@ -457,13 +519,13 @@ def usage():
   labelfs lfs.db 'query'
   labelfs lfs.db --empty-brain
 """
-if __name__ == "__main__":    
+if __name__ == "__main__":
   import os
   import sys
   from os.path import isfile,isdir,dirname,basename
   if len(sys.argv)>1:
     if isdir(sys.argv[1]):
-      le = LabelEngine(sys.argv[1])
+      le = LfsEngine(sys.argv[1])
   if len(sys.argv)>2:
     if sys.argv[2] == '--empty_brain':
       le.empty_brain()

@@ -63,7 +63,7 @@ class LabelFs(Fuse):
     self.parser.add_option(mountopt="lfsdb", metavar="PATH", default=self.lfsdb, help="use filesystem from under PATH [default:  default]")
     self.parse(values=self, errex=1)
     self.lfsdbdir = dirname(self.lfsdb)
-    self.le = lfsengine.LabelEngine(self.lfsdb)
+    self.le = lfsengine.LfsEngine(self.lfsdb)
     
   def main(self, *a, **kw):
     self.file_class = self.LabelFsFile

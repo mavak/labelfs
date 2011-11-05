@@ -4,14 +4,16 @@ from os.path import basename, expanduser
 import lfsengine
 import random
 
-le = lfsengine.LabelEngine("%s/.lfs.db" % expanduser('~'))
+le = lfsengine.LfsEngine("%s/.lfs.db" % expanduser('~'))
 
 # MODEL
 
 #Signals
+
 class CustomSignals(GObject.GObject):
     __gsignals__ = {
         'node-created': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_STRING,))
+        ,'node-selected': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_STRING,))
         ,'current-path-changed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
     }
 Signals = CustomSignals()
@@ -19,10 +21,31 @@ Signals = CustomSignals()
 globals = {}
 # GUI ELEMENTS
 
-class LabelsGUI:
-  def __init__(self):
-    self.win = LabelsWindow()
 
+class SelectedNodePanel(Gtk.Box):
+  def __init__(self):
+    Gtk.Box.__init__(self)
+    self.set_size_request(180,-1)
+    color = Gdk.RGBA()
+    color.parse("#f20170")
+    self.override_background_color(Gtk.StateFlags.NORMAL,color)
+    
+    
+    self.label=Gtk.Label("File Properties:")
+    self.label.set_valign(Gtk.Align.CENTER)
+    self.label.set_halign(Gtk.Align.CENTER)
+    color = Gdk.RGBA()
+    color.parse("#f24140")
+    self.label.override_background_color(Gtk.StateFlags.NORMAL,color)
+    
+    self.pack_start(self.label,False,False,0)
+    Signals.connect('node-selected',self.on_node_selected)
+    
+  def on_node_selected(self,a,b):
+    if('selected_node' in globals):
+      self.label.set_text(globals['selected_node'])
+    
+        
 class NewNodeButton(Gtk.Button):
   def __init__(self):
     Gtk.Button.__init__(self)
@@ -85,8 +108,8 @@ class Toolbar(Gtk.Box):
     self.add(entry)
     entry=NewFileEntry()
     self.add(entry)
-    button=NewNodeButton()
-    self.add(button)
+    #button=NewNodeButton()
+    #self.add(button)
 
 class LabelButton(Gtk.ToggleButton):
   def __init__(self,text):
@@ -137,6 +160,18 @@ class IconView(Gtk.IconView):
 
     self.connect("drag-data-received", self.on_drag_data_received)
     self.connect("key_release_event", self.on_key_release)
+    self.connect('selection-changed',self.on_selection_changed)
+
+  def on_selection_changed(self,arg):
+    pathlist = self.get_selected_items()
+    any_selected=0
+    for path in pathlist:
+      any_selected=1
+      tree_iter = self.model.get_iter(path)
+      selected_name = self.list_store.get_value(tree_iter,1)
+      globals['selected_node'] = selected_name
+      Signals.emit('node-selected',1)
+
 
   def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     uris = data.get_uris()
@@ -163,10 +198,8 @@ class IconView(Gtk.IconView):
       any_selected=0
       for path in pathlist:
         any_selected=1
-        print "Path",path
         tree_iter = self.model.get_iter(path)
         selected_name = self.list_store.get_value(tree_iter,1)
-        print "selected_name",selected_name
         le.delete_node(selected_name)
       if any_selected: self.fill_store('~*')
 
@@ -210,11 +243,19 @@ class TreeView(Gtk.TreeView):
     Signals.connect('node-created', self.on_node_created)
     self.connect('row-expanded', self.on_row_expanded)
     self.connect('key_release_event',self.on_key_release)
+    self.connect('cursor-changed',self.on_cursor_changed)
 
+  def on_cursor_changed(self,arg):
+      treeselection = self.get_selection()
+      (model, iter) = treeselection.get_selected()
+      text = self.tree_store.get_value(iter, 0)
+      globals['selected_node'] = text
+      Signals.emit('node-selected',1)
+  
   def drag_data_get_cb(self, context, selection):
       treeselection = self.get_selection()
       (model, iter) = treeselection.get_selected()
-      text = self.model.get_value(iter, 0)
+      text = self.tree_store.get_value(iter, 0)
       print "text",text
       
       #pb=GdkPixbuf.Pixbuf()
@@ -269,10 +310,8 @@ class TreeView(Gtk.TreeView):
         label.modify_font(Pango.FontDescription("Impact Label 12"))
         parent2=self.tree_store.append(tree_iter, (node['name'],))
         parent3=self.tree_store.append(parent2, ('.',))
-    print "error1"
     if child != None:
-      self.tree_store.remove(child)   
-    print "error2"
+      self.tree_store.remove(child)
         
   def on_change(self,tree_selection):
     (model, pathlist) = tree_selection.get_selected_rows()
@@ -309,7 +348,6 @@ class TreeView(Gtk.TreeView):
 class RightPanel(Gtk.Table):
   def __init__(self):
     Gtk.Table.__init__(self,1,1,False)
-
 
 class CenterPanel(Gtk.Table):
   def __init__(self):
@@ -352,10 +390,18 @@ class LabelsWindow(Gtk.Window):
     iconview = IconView()
     centerpanel.attach(iconview,0,1,1,2)
 
-    self.set_focus(None)
+    selectednodepanel = SelectedNodePanel()
+    rightpanel.attach(selectednodepanel,0,1,2,3)
+    
+    self.set_focus(iconview)
     
     self.connect("delete-event", Gtk.main_quit)
     self.show_all()
+
+class LabelsGUI:
+  def __init__(self):
+    self.win = LabelsWindow()
+
 
 if __name__ == "__main__":
   #GObject.signal_new('new-button', NewButton, GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
