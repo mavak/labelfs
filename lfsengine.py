@@ -7,7 +7,7 @@ import errno
 import re
 import random
 
-# ./labelengine.py -d lfs.db "query"
+# ./labelengine.py -d -o lfsdb=/path/to/lfs.db "query"
 
 TYPE_LABEL=0
 TYPE_FILE=1
@@ -33,8 +33,8 @@ rws = {
   ,'intersect': '&'
   ,'union'    : '|'
   ,'except'   : '¬'
-  ,'obre'     : '['
-  ,'tanca'    : ']'
+  ,'open'     : '['
+  ,'close'    : ']'
   ,'new'      : '@'
   ,'del'      : 'X'
    }
@@ -149,12 +149,12 @@ class LabelEngine():
   def seet(self,token):
     # TODO: Afegir algun caracter que siginfique algun element ? (o ningun) (o algun)
     seet = set([])
-    if token == rws['obre']:
+    if token == rws['open']:
       token = self._get_token()
       fact,token = self.expr(token)
       seet = fact
       token = self._get_token()
-    elif token == rws['tanca']:
+    elif token == rws['close']:
       token = self._get_token
     elif token == rws['file']:
       token = self._get_token()
@@ -245,16 +245,16 @@ class LabelEngine():
     token = self._get_token()
     return "",token
 
-  def obre(self,token):
-    if not token == rws['obre']:
-      print "error obre", token
+  def open(self,token):
+    if not token == rws['open']:
+      print "error open", token
       return 0
     token = self._get_token()
     return "",token
         
-  def tanca(self,token):
-    if not token == rws['tanca']:
-      print "error tanca", token
+  def close(self,token):
+    if not token == rws['close']:
+      print "error close", token
       return 0
     token = self._get_token()
     return "",token

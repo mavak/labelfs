@@ -174,6 +174,12 @@ class IconView(Gtk.IconView):
 class TreeView(Gtk.TreeView):
   def __init__(self):
     Gtk.TreeView.__init__(self)
+    #e= Gtk.Entry()
+    #map = e.get_visual()
+    #colour = map.alloc_color("#f2f1f0")
+    color = Gdk.RGBA()
+    color.parse("#f2f1f0")
+    self.override_background_color(Gtk.StateFlags.NORMAL,color)
 
     self.tree_store = Gtk.TreeStore(str)
     self.set_model(self.tree_store)
@@ -196,9 +202,29 @@ class TreeView(Gtk.TreeView):
     path=Gtk.TreePath("0")
     self.expand_row(path,False)
     #self.grab_focus()
+    
+    self.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK,
+                  [('text/plain', 0, 0)],
+                  Gdk.DragAction.DEFAULT | Gdk.DragAction.MOVE)
+
+    self.connect("drag-begin", self.drag_data_get_cb)
     Signals.connect('node-created', self.on_node_created)
     self.connect('row-expanded', self.on_row_expanded)
     self.connect('key_release_event',self.on_key_release)
+
+  def drag_data_get_cb(self, context, selection):
+      treeselection = self.get_selection()
+      (model, iter) = treeselection.get_selected()
+      text = model.get_value(iter, 0)
+      print "text",text
+      
+      #pb=GdkPixbuf.Pixbuf()
+      #pb.new_from_file("/home/gerard/label.svg")
+      #display = self.get_display()
+      #cursor=Gdk.Cursor.new_from_pixbuf(display,pb,0,0) #Gdk.CursorType.PENCIL)
+      #cursor.new_from_pixbuf(pb)
+      #gdkwin = Gdk.get_default_root_window()
+      #gdkwin.set_cursor(cursor)
   
   def on_node_created(self,signal,name):
     tree_selection = self.get_selection()
@@ -214,7 +240,6 @@ class TreeView(Gtk.TreeView):
 
   
   def add_node_to_tree(self,name):
-    print "name===",name
     has_parents=0
     for parent in le.query('#>"%s"'%name):
       has_parents=1
@@ -251,12 +276,10 @@ class TreeView(Gtk.TreeView):
     # eliminem l'ultim despres d'afegir els nous
     n_children = model.iter_n_children(tree_iter)
     while n_children > 1:
-      print "Ne queden antes de eliminar",n_children
       child_name = self.tree_store.get_value(child,0)
       self.tree_store.remove(child)
       child = model.iter_children(tree_iter)
       n_children = model.iter_n_children(tree_iter)
-      print "removed",child_name,"from",name,".Queden=",n_children
     name = self.tree_store.get_value(tree_iter,0)
     le_query=''
     if name == 'labels':
@@ -270,9 +293,9 @@ class TreeView(Gtk.TreeView):
         label.modify_font(Pango.FontDescription("Impact Label 12"))
         parent2=self.tree_store.append(tree_iter, (node['name'],))
         self.tree_store.append(parent2, ('.',))
-
-    self.tree_store.remove(child)   
-    le.printlfs() 
+  
+    if child != None:
+      self.tree_store.remove(child)   
     
   def on_change(self,tree_selection):
     (model, pathlist) = tree_selection.get_selected_rows()
