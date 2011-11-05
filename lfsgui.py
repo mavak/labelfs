@@ -183,7 +183,6 @@ class TreeView(Gtk.TreeView):
 
     self.tree_store = Gtk.TreeStore(str)
     self.set_model(self.tree_store)
-    self.model = self.get_model()    
     treeviewcolumn = Gtk.TreeViewColumn("Label")
     self.append_column(treeviewcolumn)
     cellrenderertext = Gtk.CellRendererText()
@@ -215,7 +214,7 @@ class TreeView(Gtk.TreeView):
   def drag_data_get_cb(self, context, selection):
       treeselection = self.get_selection()
       (model, iter) = treeselection.get_selected()
-      text = model.get_value(iter, 0)
+      text = self.model.get_value(iter, 0)
       print "text",text
       
       #pb=GdkPixbuf.Pixbuf()
@@ -231,28 +230,8 @@ class TreeView(Gtk.TreeView):
     (model, pathlist) = tree_selection.get_selected_rows()
     iters_selected = []
     for path in pathlist:
-      iters_selected.append(self.tree_store.get_iter(path))
+      self.refresh_iter(self.tree_store.get_iter(path))
       self.expand_row(path, True)
-
-    self.add_node_to_tree(name)
-    for iter in iters_selected:
-      self.expand_row(self.tree_store.get_path(iter), True)
-
-  
-  def add_node_to_tree(self,name):
-    has_parents=0
-    for parent in le.query('#>"%s"'%name):
-      has_parents=1
-      if 'name' in parent:
-        def func(model, path, iter, user_data):
-          iname = self.tree_store.get_value(iter,0)
-          if parent['name']==iname:
-            self.refresh_iter(iter)
-        self.model.foreach(func,None)
-    if not has_parents:
-      parent=self.model.get_iter_from_string("0")
-      self.tree_store.append(parent,(name,))
-    self.show_all()
     
   def reset_store(self):
     self.tree_store.clear()
@@ -269,17 +248,14 @@ class TreeView(Gtk.TreeView):
     self.refresh_iter(tree_iter)
   
   def refresh_iter(self,tree_iter):
-    model = self.get_model()
     name = self.tree_store.get_value(tree_iter,0)
-    child = model.iter_children(tree_iter)
+    child = self.tree_store.iter_children(tree_iter)
     # anem en compte de no eliminar tots els children
     # eliminem l'ultim despres d'afegir els nous
-    n_children = model.iter_n_children(tree_iter)
-    while n_children > 1:
+    while self.tree_store.iter_n_children(tree_iter) > 1:
       child_name = self.tree_store.get_value(child,0)
       self.tree_store.remove(child)
-      child = model.iter_children(tree_iter)
-      n_children = model.iter_n_children(tree_iter)
+      child = self.tree_store.iter_children(tree_iter)
     name = self.tree_store.get_value(tree_iter,0)
     le_query=''
     if name == 'labels':
@@ -292,11 +268,12 @@ class TreeView(Gtk.TreeView):
         label=Gtk.Label()
         label.modify_font(Pango.FontDescription("Impact Label 12"))
         parent2=self.tree_store.append(tree_iter, (node['name'],))
-        self.tree_store.append(parent2, ('.',))
-  
+        parent3=self.tree_store.append(parent2, ('.',))
+    print "error1"
     if child != None:
       self.tree_store.remove(child)   
-    
+    print "error2"
+        
   def on_change(self,tree_selection):
     (model, pathlist) = tree_selection.get_selected_rows()
     globals['current-path']=[]
