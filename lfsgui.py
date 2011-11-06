@@ -1,6 +1,7 @@
 #!/usr/bin/python
 from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Pango, GObject
-from os.path import basename, expanduser
+import os
+from os.path import realpath,isfile,isdir,basename,dirname,join,exists,normpath,expanduser,abspath
 import lfsengine
 import random
 
@@ -21,6 +22,9 @@ Signals = CustomSignals()
 
 globals = {}
 # GUI ELEMENTS
+
+def pathlist(path):
+  return [node for node in path.split('/') if node != ""]
 
 
 class SelectedNodePanel(Gtk.Box):
@@ -72,7 +76,7 @@ class NewLabelEntry(Gtk.Entry):
     if 'NewLabelEntry' in globals:
       le.create_label(globals['NewLabelEntry'])
       for label in globals['current-path']:
-        le.add_label_to_node(label['name'],globals['NewLabelEntry'])
+        le.add_label_to_node(label,globals['NewLabelEntry'])
       Signals.emit('node-created',globals['NewLabelEntry'])    
 
 class NewFileEntry(Gtk.Entry):
@@ -93,7 +97,7 @@ class NewFileEntry(Gtk.Entry):
     if 'NewFileEntry' in globals:
       le.create_file(globals['NewFileEntry'],"%s" % globals['NewFileEntry'])
       for label in globals['current-path']:
-        le.add_label_to_node(label['name'],globals['NewFileEntry'])
+        le.add_label_to_node(label,globals['NewFileEntry'])
       Signals.emit('node-created',label['name'])    
 
         
@@ -132,9 +136,14 @@ class Locationbar(Gtk.Box):
   def fill(self):
     for child in self.get_children():
       self.remove(child)
-    for node in globals['current-path']:
-      togglebutton = LocationButton(node['name'])
-      togglebutton.set_active(node['active'])
+    curr_path = globals['current-path']
+    if len(curr_path) == 0:
+      curr_path = ['ALL','LABELS']
+      
+    for node in curr_path:
+      added=1
+      togglebutton = LocationButton(node)
+      togglebutton.set_active(1)
       self.add(togglebutton)
     self.show_all()
           
@@ -181,9 +190,42 @@ class IconView(Gtk.IconView):
   def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     uris = data.get_uris()
     s = ""
+    curr_path = globals['current-path']
+    print "curr_path",curr_path
+    refresh_name=0
     for uri in uris:
-      le.create_file(basename(uri),uri)
-
+      uri = uri.replace("file://","")
+      print "uri",uri
+      bn = basename(uri)
+      if isfile(uri):
+        le.create_file(bn,uri)
+        refresh_name=uri
+        if len(curr_path)>0:
+          le_query = '+["%s"],["%s"]' % ('" | "'.join(curr_path),bn)
+          le.execute(le_query)
+      else:
+        for i in range(len(curr_path)): 
+          le.create_label(curr_path[i])
+          refresh_name=uri
+          le_query = '+["%s"],["%s"]' % (curr_path[i-1],curr_path[i])
+          le.execute('+["%s"],["%s"]' % ('" | "'.join(curr_path[:i]),curr_path[i]))
+        for r,d,fs in os.walk(uri):
+          print "forrdfs"
+          rel = r.replace(uri,"")
+          pl = pathlist(rel)
+          print "pl=",pl
+          for i in range(len(pl)):
+            le.create_label(pl[i])
+            refresh_name=pl[i]
+            if i > 0:
+              le_query = '+["%s"],["%s"]' % (pl[i-1],pl[i])
+              le.execute(le_query)
+          for f in fs:
+            le.create_file(f,"%s/%s" % (r,f))
+            refresh_name=f
+            le_query = '+["%s"],["%s"]' % ('" | "'.join(pl),f)
+            le.execute(le_query)
+    refresh_name and Signals.emit('node-created',refresh_name)  
   def on_node_created(self,num,num2):
     self.fill_store('~*')
   
@@ -195,10 +237,10 @@ class IconView(Gtk.IconView):
 
     for node in le.query(query):
       pixbuf = self.render_icon(Gtk.STOCK_FILE, Gtk.IconSize.DIALOG, None)
-      file= Gio.File.new_for_path(node['uri'])
-      type=file.query_file_type(0,None)
-      print "type=",type,file.get_path()
-      self.list_store.append([pixbuf,node['name']])
+      #file= Gio.File.new_for_path(node['uri'])
+      #type=file.query_file_type(0,None)
+      #print "type=",type,file.get_path()
+      self.list_store.append([pixbuf,node['name'].replace("&","")])
 
   def on_key_release(self,widget,event):
     if event.keyval == 65535:
@@ -206,7 +248,7 @@ class IconView(Gtk.IconView):
       any_selected=0
       for path in pathlist:
         any_selected=1
-        tree_iter = self.model.get_iter(path)
+        tree_iter = self.list_store.get_iter(path)
         selected_name = self.list_store.get_value(tree_iter,1)
         le.delete_node(selected_name)
       if any_selected: self.fill_store('~*')
@@ -317,12 +359,12 @@ class TreeView(Gtk.TreeView):
     for path in pathlist :
       tree_iter = model.get_iter(path)
       name = model.get_value(tree_iter,0)
-      globals['current-path'].insert(0,{'name':name,'active':1})
+      globals['current-path'].insert(0,name)
       parent = model.iter_parent(tree_iter)
       while parent != None:
         parent_name = model.get_value(parent,0)
         if parent_name != 'labels':
-          globals['current-path'].insert(0,{'name':parent_name,'active':1})
+          globals['current-path'].insert(0,parent_name)
         parent = model.iter_parent(parent)
     Signals.emit('current-path-changed',1)
   
@@ -342,21 +384,52 @@ class TreeView(Gtk.TreeView):
         #    le.remove_label_from_node(parent_name,selected_name)
         #    self.refresh_tree_iter(parent)
         #  parent = model.iter_parent(parent)
-            
-class RightPanel(Gtk.Table):
+class WindowPane(Gtk.ScrolledWindow):
   def __init__(self):
-    Gtk.Table.__init__(self,1,1,False)
-    self.get_style_context().add_class("right-panel")    
-    
-class CenterPanel(Gtk.Table):
+    Gtk.ScrolledWindow.__init__(self)
+
+class RightPane(Gtk.Box):
   def __init__(self):
-    Gtk.Table.__init__(self,2,1,False)
-    self.get_style_context().add_class("center-panel")    
+    Gtk.Box.__init__(self)
+    self.get_style_context().add_class("right-pane")
+    self.table = Gtk.Table(1,1,False)
+    self.add(self.table)
+
+  def add(self,child):
+    self.table.attach(child,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+
+class CenterPane(Gtk.Frame):
+  def __init__(self):
+    Gtk.Frame.__init__(self)
+    self.set_shadow_type(Gtk.ShadowType.NONE)
+    self.table = Gtk.Table(2,1,False)
+    self.add(self.table)
+    self.get_style_context().add_class("center-pane")    
+
+  def add1(self,child):
+    self.table.attach(child,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+
+  def add2(self,child):
+    win = Gtk.ScrolledWindow()
+    win.add(child)
+    self.table.attach(win,0,1,1,2) #,Gtk.AttachOptions.EXPAND) #,Gtk.AttachOptions.FILL)
   
-class LeftPanel(Gtk.Table):
+class LeftPane(Gtk.Frame):
   def __init__(self):
-    Gtk.Table.__init__(self,2,1,False)
+    Gtk.Frame.__init__(self)
+    self.set_shadow_type(Gtk.ShadowType.NONE)
+    self.table = Gtk.Table(2,1,False)
+    self.add(self.table)
     self.get_style_context().add_class("left-panel")    
+
+  def add1(self,child):
+    self.table.attach(child,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+
+  def add2(self,child):
+    win = Gtk.ScrolledWindow()
+    win.add(child)
+
+    self.table.attach(win,0,1,1,2) #,Gtk.AttachOptions.FILL,Gtk.AttachOptions.EXPAND)
 
 class MainLayout(Gtk.Paned):
   def __init__(self):
@@ -367,7 +440,7 @@ class MainLayout(Gtk.Paned):
     self.get_style_context().add_class("main-layout")    
 
   def add_1(self,child):
-    self.get_child1().pack1(child,0,1)
+    self.get_child1().pack1(child,0,0)
     
   def add_2(self,child):
     self.get_child1().pack2(child,1,0)
@@ -382,27 +455,27 @@ class LabelsWindow(Gtk.Window):
     
     self.set_default_size(600,400)
 
-    globals['current-path'] = [{'name':'all','active':1},{'name':'labels','active':1}]
+    globals['current-path'] = []
         
     mainlayout = MainLayout()
     self.add(mainlayout)
 
-    leftpanel = LeftPanel()
-    mainlayout.add_1(leftpanel)
-    centerpanel = CenterPanel()
-    mainlayout.add_2(centerpanel)
-    #rightpanel = RightPanel()
-    #mainlayout.add_3(rightpanel)
+    leftpane = LeftPane()
+    mainlayout.add_1(leftpane)
+    centerpane = CenterPane()
+    mainlayout.add_2(centerpane)
+    #rightpane = RightPane()
+    #mainlayout.add_3(rightpane)
 
     toolbar = Toolbar()
-    leftpanel.attach(toolbar,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+    leftpane.add1(toolbar)
     treeview = TreeView()
-    leftpanel.attach(treeview,0,1,1,2,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+    leftpane.add2(treeview)
     
     locationbar = Locationbar()
-    centerpanel.attach(locationbar,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.SHRINK)
+    centerpane.add1(locationbar)
     iconview = IconView()
-    centerpanel.attach(iconview,0,1,1,2) #Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
+    centerpane.add2(iconview)
 
     #selectednodepanel = SelectedNodePanel()
     #rightpanel.attach(selectednodepanel,0,1,2,3) #,Gtk.AttachOptions.SHRINK,Gtk.AttachOptions.SHRINK)

@@ -201,7 +201,6 @@ class LabelFs(Fuse):
         self.le.create_label(dl[i])
         le_query = '+["%s"],["%s"]' % (dl[i-1],dl[i])
         self.le.execute('+["%s"],["%s"]' % ('" | "'.join(dl[:i]),dl[i]))
-      flag_can_link = 1
       for r,d,fs in os.walk(target):
         rel = r.replace(target,"")
         dl = self.pathlist(rel)
