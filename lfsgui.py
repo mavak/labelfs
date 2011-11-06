@@ -15,8 +15,8 @@ le = lfsengine.LfsEngine("%s/.lfs.db" % expanduser('~'))
 class CustomSignals(GObject.GObject):
     __gsignals__ = {
         'node-created': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_STRING,))
-        ,'node-selected': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_STRING,))
-        ,'current-path-changed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'nodes-selected': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_STRING,))
+        ,'current-treepath-changed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
     }
 Signals = CustomSignals()
 
@@ -34,14 +34,15 @@ class SelectedNodePanel(Gtk.Box):
 
     self.set_size_request(180,-1)    
     
-    self.label=Gtk.Label()    
-    self.pack_start(self.label,False,False,0)
 
-    Signals.connect('node-selected',self.on_node_selected)
+    Signals.connect('nodes-selected',self.on_node_selected)
     
   def on_node_selected(self,a,b):
-    if('selected_node' in globals):
-      self.label.set_text(globals['selected_node'])
+    if('selected-nodes' in globals):
+      for node in globals['selected-nodes']:
+        label=Gtk.Label()    
+        label.set_text(node)
+        self.pack_start(label,False,False,0)
     
         
 class NewNodeButton(Gtk.Button):
@@ -69,13 +70,12 @@ class NewLabelEntry(Gtk.Entry):
     self.connect('notify::text',self.on_notify_text)
     
   def on_notify_text(self,entry,data):
-    print entry.get_text();
     globals['NewLabelEntry'] = entry.get_text()
     
   def on_activate(self,entry):
     if 'NewLabelEntry' in globals:
       le.create_label(globals['NewLabelEntry'])
-      for label in globals['current-path']:
+      for label in globals['current-treepath']:
         le.add_label_to_node(label,globals['NewLabelEntry'])
       Signals.emit('node-created',globals['NewLabelEntry'])    
 
@@ -96,15 +96,16 @@ class NewFileEntry(Gtk.Entry):
   def on_activate(self,entry):
     if 'NewFileEntry' in globals:
       le.create_file(globals['NewFileEntry'],"%s" % globals['NewFileEntry'])
-      for label in globals['current-path']:
+      for label in globals['current-treepath']:
         le.add_label_to_node(label,globals['NewFileEntry'])
       Signals.emit('node-created',label['name'])    
 
         
-class Toolbar(Gtk.Box):
+class NewEntryBar(Gtk.Box):
   def __init__(self):
     Gtk.Toolbar.__init__(self)
-    self.get_style_context().add_class("toolbar")
+    self.get_style_context().add_class("new-entry-bar")
+    #context = toolbar.get_style_context()
     entry=NewLabelEntry()
     self.add(entry)
     entry=NewFileEntry()
@@ -112,31 +113,38 @@ class Toolbar(Gtk.Box):
     #button=NewNodeButton()
     #self.add(button)
 
-class LocationButton(Gtk.ToggleButton):
+class LocationButton(Gtk.ToggleToolButton):
   def __init__(self,text):
-    Gtk.ToggleButton.__init__(self)
-    self.get_style_context().add_class("location-button")    
-    label = Gtk.Label(text)
+    Gtk.ToggleToolButton.__init__(self)
+    self.get_style_context().add_class("location-button")
 
-    self.add(label)
+    button = Gtk.ToggleButton.new_with_label(text)
+    child = self.get_child()
+
+    self.remove(child)
+    self.add(button)
     
 
-class Locationbar(Gtk.Box):
+class LocationBar(Gtk.Frame):
   def __init__(self):
-    Gtk.Box.__init__(self)
-    self.get_style_context().add_class("locationbar")    
+    Gtk.Frame.__init__(self)
+    self.get_style_context().add_class("location-bar")    
+    self.set_shadow_type(Gtk.ShadowType.NONE)
 
+    self.toolbar=Gtk.Toolbar()
+    self.toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR)
+    self.add(self.toolbar)
     self.fill()
 
-    Signals.connect('current-path-changed',self.on_query_changed)
+    Signals.connect('current-treepath-changed',self.on_query_changed)
     
   def on_query_changed(self,num,num2):
     self.fill()
       
   def fill(self):
-    for child in self.get_children():
-      self.remove(child)
-    curr_path = globals['current-path']
+    for child in self.toolbar.get_children():
+      self.toolbar.remove(child)
+    curr_path = globals['current-treepath']
     if len(curr_path) == 0:
       curr_path = ['ALL','LABELS']
       
@@ -144,21 +152,20 @@ class Locationbar(Gtk.Box):
       added=1
       togglebutton = LocationButton(node)
       togglebutton.set_active(1)
-      self.add(togglebutton)
+      self.toolbar.add(togglebutton)
     self.show_all()
           
 class IconView(Gtk.IconView):
   def __init__(self):
     self.list_store = Gtk.ListStore(GdkPixbuf.Pixbuf,str)
     Gtk.IconView.__init__(self,model=self.list_store)
-    self.get_style_context().add_class("iconview")    
+    self.get_style_context().add_class("icon-view")    
  
     self.set_pixbuf_column(0)
     self.set_markup_column(1)
     self.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
     
     self.icon_theme=Gtk.IconTheme.get_default()
-    print self.icon_theme.list_icons("GContentTypes")
     self.fill_store('~*')
         
     dnd_list = Gtk.TargetEntry.new("text/uri-list", 0, 0)
@@ -171,7 +178,7 @@ class IconView(Gtk.IconView):
     self.drag_dest_add_uri_targets()
 
     Signals.connect('node-created', self.on_node_created)
-    Signals.connect('current-path-changed', self.on_current_path_changed)
+    Signals.connect('current-treepath-changed', self.on_current_treepath_changed)
 
     self.connect("drag-data-received", self.on_drag_data_received)
     self.connect("key_release_event", self.on_key_release)
@@ -184,18 +191,16 @@ class IconView(Gtk.IconView):
       any_selected=1
       tree_iter = self.list_store.get_iter(path)
       selected_name = self.list_store.get_value(tree_iter,1)
-      globals['selected_node'] = selected_name
-      Signals.emit('node-selected',1)
+      globals['selected-nodes'] = selected_name
+      Signals.emit('nodes-selected',1)
 
   def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     uris = data.get_uris()
     s = ""
-    curr_path = globals['current-path']
-    print "curr_path",curr_path
+    curr_path = globals['current-treepath']
     refresh_name=0
     for uri in uris:
       uri = uri.replace("file://","")
-      print "uri",uri
       bn = basename(uri)
       if isfile(uri):
         le.create_file(bn,uri)
@@ -210,10 +215,8 @@ class IconView(Gtk.IconView):
           le_query = '+["%s"],["%s"]' % (curr_path[i-1],curr_path[i])
           le.execute('+["%s"],["%s"]' % ('" | "'.join(curr_path[:i]),curr_path[i]))
         for r,d,fs in os.walk(uri):
-          print "forrdfs"
           rel = r.replace(uri,"")
           pl = pathlist(rel)
-          print "pl=",pl
           for i in range(len(pl)):
             le.create_label(pl[i])
             refresh_name=pl[i]
@@ -225,12 +228,18 @@ class IconView(Gtk.IconView):
             refresh_name=f
             le_query = '+["%s"],["%s"]' % ('" | "'.join(pl),f)
             le.execute(le_query)
-    refresh_name and Signals.emit('node-created',refresh_name)  
+    refresh_name and Signals.emit('node-created',refresh_name)
+
   def on_node_created(self,num,num2):
     self.fill_store('~*')
   
-  def on_current_path_changed(self,num,num2):
-    self.fill_store('~*')
+  def on_current_treepath_changed(self,num,num2):
+    le_query = '~*'
+    curr_path = globals['current-treepath']
+    if len(curr_path) >0:
+      le_query = '~[<"%s"] | #<"%s"' % ('" & <"'.join(curr_path),curr_path[-1])
+
+    self.fill_store(le_query)
     
   def fill_store(self,query):
     self.list_store.clear()
@@ -257,7 +266,7 @@ class IconView(Gtk.IconView):
 class TreeView(Gtk.TreeView):
   def __init__(self):
     Gtk.TreeView.__init__(self)
-    self.get_style_context().add_class("treeview")    
+    self.get_style_context().add_class("tree-view")    
 
     self.tree_store = Gtk.TreeStore(str)
     self.set_model(self.tree_store)
@@ -287,20 +296,11 @@ class TreeView(Gtk.TreeView):
     Signals.connect('node-created', self.on_node_created)
     self.connect('row-expanded', self.on_row_expanded)
     self.connect('key_release_event',self.on_key_release)
-    self.connect('cursor-changed',self.on_cursor_changed)
 
-  def on_cursor_changed(self,arg):
-      treeselection = self.get_selection()
-      (model, iter) = treeselection.get_selected()
-      text = self.tree_store.get_value(iter, 0)
-      globals['selected_node'] = text
-      Signals.emit('node-selected',1)
-  
   def drag_data_get_cb(self, context, selection):
       treeselection = self.get_selection()
       (model, iter) = treeselection.get_selected()
       text = self.tree_store.get_value(iter, 0)
-      print "text",text
       
       #pb=GdkPixbuf.Pixbuf()
       #pb.new_from_file("/home/gerard/label.svg")
@@ -355,19 +355,24 @@ class TreeView(Gtk.TreeView):
         
   def on_change(self,tree_selection):
     (model, pathlist) = tree_selection.get_selected_rows()
-    globals['current-path']=[]
+    globals['current-treepath']=[]
+    globals['selected-nodes']=[]
     for path in pathlist :
       tree_iter = model.get_iter(path)
       name = model.get_value(tree_iter,0)
-      globals['current-path'].insert(0,name)
+      if name != 'labels':
+        globals['current-treepath'].insert(0,name)
+        globals['selected-nodes'].insert(0,name)
       parent = model.iter_parent(tree_iter)
       while parent != None:
         parent_name = model.get_value(parent,0)
         if parent_name != 'labels':
-          globals['current-path'].insert(0,parent_name)
+          globals['current-treepath'].insert(0,parent_name)
         parent = model.iter_parent(parent)
-    Signals.emit('current-path-changed',1)
-  
+
+    Signals.emit('nodes-selected',1)
+    Signals.emit('current-treepath-changed',1)
+
   def on_key_release(self,widget,event):
     if event.keyval == 65535:
       tree_selection = self.get_selection()
@@ -401,10 +406,12 @@ class RightPane(Gtk.Box):
 class CenterPane(Gtk.Frame):
   def __init__(self):
     Gtk.Frame.__init__(self)
+    self.get_style_context().add_class("center-pane")    
     self.set_shadow_type(Gtk.ShadowType.NONE)
     self.table = Gtk.Table(2,1,False)
+    self.table.get_style_context().add_class("center-pane-table")
     self.add(self.table)
-    self.get_style_context().add_class("center-pane")    
+
 
   def add1(self,child):
     self.table.attach(child,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
@@ -420,7 +427,7 @@ class LeftPane(Gtk.Frame):
     self.set_shadow_type(Gtk.ShadowType.NONE)
     self.table = Gtk.Table(2,1,False)
     self.add(self.table)
-    self.get_style_context().add_class("left-panel")    
+    self.get_style_context().add_class("left-pane")    
 
   def add1(self,child):
     self.table.attach(child,0,1,0,1,Gtk.AttachOptions.FILL,Gtk.AttachOptions.FILL)
@@ -455,7 +462,7 @@ class LabelsWindow(Gtk.Window):
     
     self.set_default_size(600,400)
 
-    globals['current-path'] = []
+    globals['current-treepath'] = []
         
     mainlayout = MainLayout()
     self.add(mainlayout)
@@ -467,18 +474,18 @@ class LabelsWindow(Gtk.Window):
     #rightpane = RightPane()
     #mainlayout.add_3(rightpane)
 
-    toolbar = Toolbar()
+    toolbar = NewEntryBar()
     leftpane.add1(toolbar)
     treeview = TreeView()
     leftpane.add2(treeview)
     
-    locationbar = Locationbar()
+    locationbar = LocationBar()
     centerpane.add1(locationbar)
     iconview = IconView()
     centerpane.add2(iconview)
 
     #selectednodepanel = SelectedNodePanel()
-    #rightpanel.attach(selectednodepanel,0,1,2,3) #,Gtk.AttachOptions.SHRINK,Gtk.AttachOptions.SHRINK)
+    #rightpanel.add(selectednodepanel)
     
     self.set_focus(iconview)
     

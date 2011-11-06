@@ -1,56 +1,38 @@
-Locationbar {
-  color: #000099;
-}
+.location-bar {
 
-LabelButton {
-  color: #749273;
-  }
-  
-LabelsGUI {
-  background-color: #438712;
-}
-
-.selected-node-panel {
-  background-color: #ff0000;
-}
-
-.toolbar {
-  color: #116699;
-  background-color: #f2f1f0;
-  padding: 5px;
-}
-
-.locationbar{
-  color: #116699;
-  background-color: #525150;
-  padding: 5px;
 }
 
 .new-label-entry {
-  font: Impact Label 12
+  font: Impact Label 11
 }
 
 .new-file-entry {
   font: Monospace 9
 }
 
-.location-button {
-  font: Impact Label 12
+.location-button *{
+  font: Impact Label 13;
+  padding: 6px;
 }
 
-.treeview {
+.tree-view {
   background-color: #f2f1f0;
   font: Impact Label 12
 }
 
-.right-panel {
+.right-pane {
 
 }
 
-.center-panel {
-  background-color: #525150;
+.center-pane * {
+  border-width: 0px;
+  border-color: #ffffff;
 }
 
-.labels-window {
+.center-pane-table *{  
+  border-color: #ffffff;
+}
 
+.labels-window * {
+  border-width: 0px;
 }
