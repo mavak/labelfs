@@ -1,0 +1,56 @@
+Locationbar {
+  color: #000099;
+}
+
+LabelButton {
+  color: #749273;
+  }
+  
+LabelsGUI {
+  background-color: #438712;
+}
+
+.selected-node-panel {
+  background-color: #ff0000;
+}
+
+.toolbar {
+  color: #116699;
+  background-color: #f2f1f0;
+  padding: 5px;
+}
+
+.locationbar{
+  color: #116699;
+  background-color: #525150;
+  padding: 5px;
+}
+
+.new-label-entry {
+  font: Impact Label 12
+}
+
+.new-file-entry {
+  font: Monospace 9
+}
+
+.location-button {
+  font: Impact Label 12
+}
+
+.treeview {
+  background-color: #f2f1f0;
+  font: Impact Label 12
+}
+
+.right-panel {
+
+}
+
+.center-panel {
+  background-color: #525150;
+}
+
+.labels-window {
+
+}
