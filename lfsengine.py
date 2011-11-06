@@ -351,7 +351,7 @@ class NodeEngine():
           return self.lfs['names'][name] # realment esta retornant el id
     return -1
   
-  #def get_uri(self, name) # assumir type=FILE
+  #def get_uri(self, name) set_uri# assumir type=FILE
 
   def exists_node(self,name,tyype=-1):
     return self.getid(name,tyype)  in self.lfs['ids']

@@ -4,6 +4,7 @@ from os.path import basename, expanduser
 import lfsengine
 import random
 
+
 le = lfsengine.LfsEngine("%s/.lfs.db" % expanduser('~'))
 
 # MODEL
@@ -90,7 +91,7 @@ class NewFileEntry(Gtk.Entry):
 
   def on_activate(self,entry):
     if 'NewFileEntry' in globals:
-      le.create_file(globals['NewFileEntry'],"file:///%s" % globals['NewFileEntry'])
+      le.create_file(globals['NewFileEntry'],"%s" % globals['NewFileEntry'])
       for label in globals['current-path']:
         le.add_label_to_node(label['name'],globals['NewFileEntry'])
       Signals.emit('node-created',label['name'])    
@@ -142,11 +143,13 @@ class IconView(Gtk.IconView):
     self.list_store = Gtk.ListStore(GdkPixbuf.Pixbuf,str)
     Gtk.IconView.__init__(self,model=self.list_store)
     self.get_style_context().add_class("iconview")    
-
+ 
     self.set_pixbuf_column(0)
     self.set_markup_column(1)
     self.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
-
+    
+    self.icon_theme=Gtk.IconTheme.get_default()
+    print self.icon_theme.list_icons("GContentTypes")
     self.fill_store('~*')
         
     dnd_list = Gtk.TargetEntry.new("text/uri-list", 0, 0)
@@ -170,11 +173,10 @@ class IconView(Gtk.IconView):
     any_selected=0
     for path in pathlist:
       any_selected=1
-      tree_iter = self.model.get_iter(path)
+      tree_iter = self.list_store.get_iter(path)
       selected_name = self.list_store.get_value(tree_iter,1)
       globals['selected_node'] = selected_name
       Signals.emit('node-selected',1)
-
 
   def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     uris = data.get_uris()
@@ -192,12 +194,11 @@ class IconView(Gtk.IconView):
     self.list_store.clear()
 
     for node in le.query(query):
-      #thumbFactory = gnomedesktop.ThumbnailFactory(gnomedesktop.THUMBNAIL_SIZE_LARGE)
-      if thumbFactory.can_thumbnail(node['uri'] ,mime, 0):
-        #thumbnail = thumbFactory.generate_thumbnail(node['uri'], mime)
-        #pixbuf = gnome.ui.thumbnail_factory_generate_thumbnail(
-        pixbuf = self.render_icon(Gtk.STOCK_FILE, Gtk.IconSize.DIALOG, None)
-        self.list_store.append([pixbuf,node['name']])
+      pixbuf = self.render_icon(Gtk.STOCK_FILE, Gtk.IconSize.DIALOG, None)
+      file= Gio.File.new_for_path(node['uri'])
+      type=file.query_file_type(0,None)
+      print "type=",type,file.get_path()
+      self.list_store.append([pixbuf,node['name']])
 
   def on_key_release(self,widget,event):
     if event.keyval == 65535:
@@ -218,6 +219,7 @@ class TreeView(Gtk.TreeView):
 
     self.tree_store = Gtk.TreeStore(str)
     self.set_model(self.tree_store)
+    
     treeviewcolumn = Gtk.TreeViewColumn("Label")
     self.append_column(treeviewcolumn)
     cellrenderertext = Gtk.CellRendererText()
@@ -228,14 +230,12 @@ class TreeView(Gtk.TreeView):
     self.selection.set_mode(Gtk.SelectionMode.BROWSE)
     self.selection.connect("changed",self.on_change)
     self.set_size_request(200, -1)
-    #self.modify_font(Pango.FontDescription("Impact Label 12"))
-    #self.collapse_all()
     self.set_headers_visible(False)
+
     self.reset_store()
     
     path=Gtk.TreePath("0")
     self.expand_row(path,False)
-    #self.grab_focus()
     
     self.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK,
                   [('text/plain', 0, 0)],
@@ -281,8 +281,6 @@ class TreeView(Gtk.TreeView):
     parent = self.tree_store.append(None, ('labels',))
     for node in le.query('#^<*'):
       if 'name' in node:
-        label=Gtk.Label()
-        #label.modify_font(Pango.FontDescription("Impact Label 12"))
         parent2=self.tree_store.append(parent, (node['name'],))
         for node2 in le.query('#<"%s"'%node['name']):
           parent3=self.tree_store.append(parent2, (node2['name'],))
@@ -308,8 +306,6 @@ class TreeView(Gtk.TreeView):
       
     for node in le.query(le_query):
       if 'name' in node:
-        label=Gtk.Label()
-        #label.modify_font(Pango.FontDescription("Impact Label 12"))
         parent2=self.tree_store.append(tree_iter, (node['name'],))
         parent3=self.tree_store.append(parent2, ('.',))
     if child != None:
