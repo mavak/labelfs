@@ -1,0 +1,25 @@
+.location-bar {
+
+}
+
+.new-label-entry {
+  font: Impact Label 11
+}
+
+.new-file-entry {
+  font: Monospace 9
+}
+
+.location-button * {
+  font: Impact Label 13;
+  padding: 6px;
+}
+
+.tree-view {
+  background-color: #f2f1f0;
+  font: Impact Label 12
+}
+
+.window * {
+  border-width: 0px;
+}

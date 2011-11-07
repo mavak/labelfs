@@ -1,0 +1,6 @@
+NewLabelEntry_text = None
+NewFileEntry_text = None
+current_treepath = []
+selected_nodes = []
+uris_dropped_on_icon_view = None
+expanded_tree_iter = None

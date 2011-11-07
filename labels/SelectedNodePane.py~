@@ -1,0 +1,20 @@
+import Gtk
+
+import CustomSignals
+
+class SelectedNodePane(Gtk.Box):
+  def __init__(self):
+    Gtk.Box.__init__(self)
+    self.get_style_context().add_class("selected-node-panel")    
+
+    self.set_size_request(180,-1)    
+
+    Signals.connect('nodes-selected',self.on_node_selected)
+    
+  def on_node_selected(self,a,b):
+    if('selected-nodes' in globals):
+      for node in globals['selected-nodes']:
+        label=Gtk.Label()    
+        label.set_text(node)
+        self.pack_start(label,False,False,0)
+

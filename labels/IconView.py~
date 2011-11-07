@@ -1,0 +1,77 @@
+import Gtk, GdkPixbuf
+
+class IconView(Gtk.IconView):
+  def __init__(self):
+    self.list_store = Gtk.ListStore(GdkPixbuf.Pixbuf,str)
+    Gtk.IconView.__init__(self,model=self.list_store)
+    self.get_style_context().add_class("icon-view")    
+ 
+    self.set_pixbuf_column(0)
+    self.set_markup_column(1)
+    self.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
+    
+    self.icon_theme=Gtk.IconTheme.get_default()
+    self.fill_store('~*')
+        
+    dnd_list = Gtk.TargetEntry.new("text/uri-list", 0, 0)
+    self.drag_dest_set(
+      Gtk.DestDefaults.MOTION |
+      Gtk.DestDefaults.HIGHLIGHT |
+      Gtk.DestDefaults.DROP,
+      [dnd_list],
+      Gdk.DragAction.MOVE )
+    self.drag_dest_add_uri_targets()
+
+    Signals.connect('node-created', self.on_node_created)
+    Signals.connect('current-treepath-changed', self.on_current_treepath_changed)
+
+    self.connect("drag-data-received", self.on_drag_data_received)
+    self.connect("key_release_event", self.on_key_release)
+    self.connect('selection-changed',self.on_selection_changed)
+
+  def on_selection_changed(self,arg):
+    pathlist = self.get_selected_items()
+    any_selected=0
+    for path in pathlist:
+      any_selected=1
+      tree_iter = self.list_store.get_iter(path)
+      selected_name = self.list_store.get_value(tree_iter,1)
+      globals['selected-nodes'] = selected_name
+      Signals.emit('nodes-selected',1)
+
+  def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
+    uris = data.get_uris()
+    s = ""
+    curr_path = globals['current-treepath']
+    refresh_name=0
+    for uri in uris:
+      uri = uri.replace("file://","")
+      bn = basename(uri)
+      if isfile(uri):
+        le.create_file(bn,uri)
+        refresh_name=uri
+        if len(curr_path)>0:
+          le_query = '+["%s"],["%s"]' % ('" | "'.join(curr_path),bn)
+          le.execute(le_query)
+      else:
+        for i in range(len(curr_path)): 
+          le.create_label(curr_path[i])
+          refresh_name=uri
+          le_query = '+["%s"],["%s"]' % (curr_path[i-1],curr_path[i])
+          le.execute('+["%s"],["%s"]' % ('" | "'.join(curr_path[:i]),curr_path[i]))
+        for r,d,fs in os.walk(uri):
+          rel = r.replace(uri,"")
+          pl = pathlist(rel)
+          for i in range(len(pl)):
+            le.create_label(pl[i])
+            refresh_name=pl[i]
+            if i > 0:
+              le_query = '+["%s"],["%s"]' % (pl[i-1],pl[i])
+              le.execute(le_query)
+          for f in fs:
+            le.create_file(f,"%s/%s" % (r,f))
+            refresh_name=f
+            le_query = '+["%s"],["%s"]' % ('" | "'.join(pl),f)
+            le.execute(le_query)
+    refresh_name and Signals.emit('node-created',refresh_name)
+

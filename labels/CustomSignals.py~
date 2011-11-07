@@ -1,0 +1,14 @@
+from gi.repository import GObject
+
+class CustomSignals(GObject.GObject):
+    __gsignals__ = {
+        'nodes-created': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'node-creation-request': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'nodes-selected': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'current-treepath-changed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'uris-dropped-on-icon-view': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+        ,'tree-row-expanded': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_INT,))
+    }
+
+_signals = CustomSignals()
+
