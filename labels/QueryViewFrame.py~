@@ -63,6 +63,6 @@ class LocationBar(Gtk.Frame):
       ttb.get_style_context().add_class("location-button")
       ttb.set_active(1)
       self.toolbar.add(ttb)
-    self.show_all()
+    #self.show_all()
    
 

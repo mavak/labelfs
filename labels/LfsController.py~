@@ -28,7 +28,6 @@ class LfsController:
           le_query = '+["%s"],["%s"]' % ('" | "'.join(path),bn)
           self.le.execute(le_query)
       else:
-        print "*uri* ",uri," *path* ",path
         for i in range(len(path)): 
           self.le.create_label(path[i])
           print "create",path[i]

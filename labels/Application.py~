@@ -11,11 +11,15 @@ class Application(GObject.GObject):
 
     self.new_label_entry = self.win.tree_view_frame.new_node_bar.new_label_entry
     self.new_file_entry = self.win.tree_view_frame.new_node_bar.new_file_entry
+
     self.tree_view = self.win.tree_view_frame.tree_view
     self.tree_store = self.win.tree_view_frame.tree_view.tree_store    
+
     self.location_bar = self.win.query_view_frame.location_bar
+
     self.icon_view = self.win.query_view_frame.icon_view
     self.icon_store = self.win.query_view_frame.icon_view.list_store
+
 
     self.new_label_entry.connect('activate',self.on_new_label_entry_activate)
     self.new_file_entry.connect('activate',self.on_new_file_entry_activate)

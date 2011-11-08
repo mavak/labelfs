@@ -1,5 +1,7 @@
 from gi.repository import Gtk
 
+import Globals
+
 class SelectedNodesFrame(Gtk.Frame):
   def __init__(self):
     Gtk.Frame.__init__(self)
