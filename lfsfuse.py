@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import fuse
-from fuse import Fuse   # No ve per defecte en Ubuntu!
+import fuse # No ve per defecte en Ubuntu!
 import lfsengine
 import stat
 import os    
@@ -54,10 +53,10 @@ def usage():
   
   """.format(prog = basename(sys.argv[0]))
 
-class LabelFs(Fuse):
+class LabelFs(fuse.Fuse):
   def __init__(self, *args, **kw):
     self.lfsdb = "%s/.lfs.db" % expanduser('~')
-    Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
+    fuse.Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
     self.flags = 0
     self.multithreaded = True
     self.parser.add_option(mountopt="lfsdb", metavar="PATH", default=self.lfsdb, help="use filesystem from under PATH [default:  default]")
@@ -67,7 +66,7 @@ class LabelFs(Fuse):
     
   def main(self, *a, **kw):
     self.file_class = self.LabelFsFile
-    Fuse.main(self, *a, **kw)
+    fuse.Fuse.main(self, *a, **kw)
     return 0
   
   def pathlist(self,path):

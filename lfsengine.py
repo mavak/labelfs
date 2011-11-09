@@ -13,7 +13,6 @@ import random
 
 TYPE_LABEL=0
 TYPE_FILE=1
-#>"Musica"
 
 # GRAMATICA
 # expr -> expr + term | expr - term | term
@@ -379,7 +378,6 @@ class NodeEngine():
       self.lfs['names'][name]=iid
       self.lfs['parents'][iid] = {}
       self.lfs['types'][TYPE_FILE][iid] = 1
-      print "created file",name, iid, uri
       return iid
 
   def delete_node(self,name):

@@ -43,12 +43,8 @@ class Application(GObject.GObject):
     self.selected_nodes = []
 
     self.reset_tree_store()
-    path=Gtk.TreePath("0")
-    self.tree_view.expand_row(path,False)
-
-    self.refresh_location_bar(self.current_path)
-  
-    self.fill_icon_view()
+    self.refresh_location_bar()
+    self.refresh_icon_view()
 
 
   def reset_tree_store(self):
@@ -60,32 +56,33 @@ class Application(GObject.GObject):
         for node2 in self.lfs.query('#<"%s"'%node['name']):
           parent3=self.tree_store.append(parent2, (node2['name'],))
 
-  #Una funcio que siga refresh_treeview i que refresque els nodos que estan expandits
-  def refresh_tree_iter(self,tree_iter=None):
-    le_query=''
-    name = self.tree_store.get_value(tree_iter,0)
-    if name == 'labels':
-      le_query = ('#^<*')
+  def refresh_tree_view(self,iter=None):
+    def refresh_tree_iter(tree,tree_iter,data):
+      le_query=''
+      name = self.tree_store.get_value(tree_iter,0)
+      if name == 'labels': #root label
+        le_query = ('#^<*')
+      else:
+        le_query = ('#<"%s"' % name)
+      self.tree_view.refresh_iter(tree_iter,[node for node in self.lfs.query(le_query)])
+    
+    if iter != None:
+      refresh_tree_iter(self.tree_view,iter,None)
     else:
-      le_query = ('#<"%s"' % name)
-      
-    self.tree_view.refresh_iter(tree_iter,[node for node in self.lfs.query(le_query)])
-  
-  def refresh_tree_selected_iters(self):
-    tree_selection = self.tree_view.get_selection()
-    (model, pathlist) = tree_selection.get_selected_rows()
-    iters_selected = []
-    for path in pathlist:
-      self.refresh_tree_iter(self.tree_store.get_iter(path))
-      self.tree_view.expand_row(path, True)
+      if not self.tree_store.get_iter_first():
+        self.tree_store.append(None, ('labels',))
+        path=Gtk.TreePath("0")
+        self.tree_view.expand_row(path,False)
+      self.tree_view.map_expanded_rows(refresh_tree_iter,None)
 
-  def refresh_location_bar(self,path):
+  def refresh_location_bar(self,path=None):
+    if path == None: path = self.current_path
     if len(path) > 0:
       self.location_bar.refresh(path)
     else:
       self.location_bar.refresh(['ALL','LABELS'])
 
-  def fill_icon_view(self):
+  def refresh_icon_view(self):
     self.icon_store.clear()
     
     le_query = '~*'
@@ -112,9 +109,9 @@ class Application(GObject.GObject):
           self.current_path.insert(0,parent_name)
         parent = model.iter_parent(parent)
 
-    self.refresh_tree_iter(tree_iter)
-    self.location_bar.refresh(self.current_path)
-    self.fill_icon_view()
+    self.refresh_tree_view(tree_iter)
+    self.refresh_location_bar(self.current_path)
+    self.refresh_icon_view()
 
   def on_tree_view_drag_data_get_cb(self, context, selection):
       treeselection = self.get_selection()
@@ -122,7 +119,7 @@ class Application(GObject.GObject):
       text = self.tree_store.get_value(iter, 0)
       
   def on_tree_view_row_expanded(self,tree_view,tree_iter,path):
-    self.refresh_tree_iter(tree_iter)          
+    self.refresh_tree_view(tree_iter)          
 
   def on_tree_view_key_release(self,widget,event):
     if event.keyval == 65535:
@@ -133,12 +130,12 @@ class Application(GObject.GObject):
         selected_name = model.get_value(tree_iter,0)
         self.lfs.delete_node(selected_name)
         parent = model.iter_parent(tree_iter)
-        self.refresh_tree_iter(parent)
+        self.refresh_tree_view(parent)
         while parent != None:
           parent_name = model.get_value(parent,0)
           if parent_name != 'labels':
             self.lfs.remove_label_from_node(parent_name,selected_name)
-            self.refresh_tree_iter(parent)
+            self.refresh_tree_view(parent)
           parent = model.iter_parent(parent)
 
     
@@ -167,6 +164,8 @@ class Application(GObject.GObject):
 
   def on_icon_view_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     self.lfs.create_nodes_from_uris_in_path(data.get_uris(),self.current_path)
+    self.refresh_icon_view()
+    self.refresh_tree_view()
           
   def on_icon_view_key_release(self,widget,event):
     if event.keyval == 65535:
@@ -177,5 +176,5 @@ class Application(GObject.GObject):
         tree_iter = self.icon_store.get_iter(path)
         selected_name = self.icon_store.get_value(tree_iter,1)
         self.lfs.delete_node(selected_name)
-      if any_selected: self.fill_icon_view()
+      if any_selected: self.refresh_icon_view()
   
