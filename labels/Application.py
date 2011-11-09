@@ -1,5 +1,7 @@
-from gi.repository import Gtk, GObject
-import os
+from gi.repository import Gtk, Gdk, GObject
+import sys, os
+
+path=os.path.abspath(os.path.dirname(sys.argv[0]))
 
 import Window
 import LfsController
@@ -8,6 +10,10 @@ class Application(GObject.GObject):
   def __init__(self):
     self.lfs = LfsController.LfsController("%s/.lfs.db" % os.path.expanduser('~'))
     self.win = Window.Window()
+
+    provider = Gtk.CssProvider();
+    provider.load_from_path("%s/gtk-style.css" % path);    
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider, 600);
 
     self.new_label_entry = self.win.tree_view_frame.new_node_bar.new_label_entry
     self.new_file_entry = self.win.tree_view_frame.new_node_bar.new_file_entry

@@ -9,9 +9,11 @@ import random
 
 # ./labelengine.py -d -o lfsdb=/path/to/lfs.db "query"
 # TODO save labels attached on a file into the xattr of this file
+# la "key" d'un node file ha de ser la seva uri, no el seu name. Poden haver dos nodes en el mateix nom, pero no la mateixa uri, tot se consulta per uri..., (etiquetar uri) uri-labeler
 
 TYPE_LABEL=0
 TYPE_FILE=1
+#>"Musica"
 
 # GRAMATICA
 # expr -> expr + term | expr - term | term

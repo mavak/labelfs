@@ -1,4 +1,4 @@
-from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Pango, GObject
+from gi.repository import Gtk
 
 import TreeViewFrame
 import QueryViewFrame
@@ -24,11 +24,6 @@ class ThreePaned(Gtk.Paned):
 class Window(Gtk.Window):
   def __init__(self):
     Gtk.Window.__init__(self, title="Labels")
-    provider = Gtk.CssProvider();
-    provider.load_from_path("/home/gerard/labelfs/labels/gtk-style.css");
-    
-    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider, 600);
-
     self.get_style_context().add_class("window")    
     
     self.set_default_size(800,600)
@@ -42,8 +37,8 @@ class Window(Gtk.Window):
     self.query_view_frame = QueryViewFrame.QueryViewFrame()
     self.three_paned.add_center(self.query_view_frame)
 
-    #self.selected_node_frame = SelectedNodeFrame.SelectedNodeFrame()
-    #self.three_paned.add_right(self.selected_node_frame)
+    #.selected_nodes_frame = SelectedNodesFrame()
+    #self.three_paned.add_right(self.selected_nodes_frame)
         
     self.set_focus(self.query_view_frame.icon_view)
 
