@@ -11,8 +11,8 @@
 }
 
 .location-button * {
-  font: Impact Label 14;
   padding: 6px;
+  font: Impact Label 14;  
 }
 
 .tree-view {

@@ -132,7 +132,8 @@ class NodeEngine():
       self.lfs['childs']={}
 
 
-  ## INTERPRETER
+  ##### INTERPRETER #####
+
   def _get_token(self):
     token = ''
     pos = self._pos
@@ -331,7 +332,8 @@ class NodeEngine():
     expr,token = self.expr(token)
     for nodeid in expr:
       yield self.lfs['ids'][nodeid]
-    # END INTERPRETER
+ 
+  ##### END INTERPRETER#####
 
 
   def query(self,le_query_str,offset=-1):
@@ -415,7 +417,7 @@ class NodeEngine():
         self.lfs['names'][new_name] = iid
 
   def exists_relation(self,parentid,childid):
-    # TODO: controlar que no s'inserte una relacio ciclica
+    # TODO: controlar que no s'inserte una relacio ciclica (funcio recursiva)
     return childid in self.lfs['parents'] and parentid in self.lfs['parents'][childid]
     #or/and self.lfs['childs'][parentid][childid]
 

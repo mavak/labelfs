@@ -26,11 +26,9 @@ class LfsController:
           le_query = '+["%s"],["%s"]' % ('" | "'.join(path),bn)
           self.le.execute(le_query)
       else:
-        print "*uri* ",uri," *path* ",path
         #Make sure directories in path already exist as labels, creating them
         for i in range(len(path)):
           self.le.create_label(path[i])
-          print "create",path[i]
           #le_query = '+["%s"],["%s"]' % (path[i-1],path[i])
           self.le.execute('+["%s"],["%s"]' % ('" | "'.join(path[:i]),path[i]))
         #Create a label with the name of the last directory in path, and attach to de path

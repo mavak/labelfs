@@ -42,7 +42,7 @@ class Application(GObject.GObject):
     self.current_path = []
     self.selected_nodes = []
 
-    self.reset_tree_store()
+    self.refresh_tree_view()
     self.refresh_location_bar()
     self.refresh_icon_view()
 
@@ -56,9 +56,10 @@ class Application(GObject.GObject):
         for node2 in self.lfs.query('#<"%s"'%node['name']):
           parent3=self.tree_store.append(parent2, (node2['name'],))
 
-  def refresh_tree_view(self,iter=None):
-    def refresh_tree_iter(tree,tree_iter,data):
+  def refresh_tree_view(self,tree_iter=None):
+    def refresh_tree_path(tree,tree_path,data):
       le_query=''
+      tree_iter=self.tree_store.get_iter(tree_path)
       name = self.tree_store.get_value(tree_iter,0)
       if name == 'labels': #root label
         le_query = ('#^<*')
@@ -66,14 +67,17 @@ class Application(GObject.GObject):
         le_query = ('#<"%s"' % name)
       self.tree_view.refresh_iter(tree_iter,[node for node in self.lfs.query(le_query)])
     
-    if iter != None:
-      refresh_tree_iter(self.tree_view,iter,None)
+    if tree_iter != None:
+      refresh_tree_path(self.tree_view,self.tree_store.get_path(tree_iter),"")
     else:
       if not self.tree_store.get_iter_first():
-        self.tree_store.append(None, ('labels',))
+        parent=self.tree_store.append(None, ('labels',))
+        self.tree_store.append(parent, ('.',))
         path=Gtk.TreePath("0")
+        print "expanded"
         self.tree_view.expand_row(path,False)
-      self.tree_view.map_expanded_rows(refresh_tree_iter,None)
+      print "map"
+      self.tree_view.map_expanded_rows(refresh_tree_path,None)
 
   def refresh_location_bar(self,path=None):
     if path == None: path = self.current_path
