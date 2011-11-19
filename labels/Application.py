@@ -3,10 +3,7 @@ import sys, os, urllib, urlparse
 import xml.sax.saxutils
 
 path=os.path.abspath(os.path.dirname(sys.argv[0]))
-
-cmd_folder = "%s/.." % path #os.path.dirname(os.path.abspath(__file__))
-if cmd_folder not in sys.path:
-  sys.path.insert(0, cmd_folder)
+if "%s/.." % path not in sys.path: sys.path.insert(0, "%s/.." % path)
 import lfsengine
 
 import Window
@@ -70,8 +67,8 @@ class Application():
       else:
         le_query = ('#<"%s"' % name)
       for node in self.lfs.query(le_query):
-        if 'name' in node:
-          parent2=self.tree_view.tree_store.append(tree_iter, (node['name'],))
+        if 'uri' in node:
+          parent2=self.tree_view.tree_store.append(tree_iter, (node['uri'],))
           parent3=self.tree_view.tree_store.append(parent2, ('.',))
       # Remove last iter
       if child != None:
@@ -111,8 +108,8 @@ class Application():
       icon_info=Gtk.IconTheme.get_default().lookup_by_gicon(icon,48,Gtk.IconLookupFlags.FORCE_SIZE|Gtk.IconLookupFlags.GENERIC_FALLBACK)
       if icon_info:
         pixbuf = icon_info.load_icon()
-      name=xml.sax.saxutils.escape(node['name'])
       uri=xml.sax.saxutils.escape(node['uri'])
+      name=pathlist(uri)[-1]
     
       self.icon_view.list_store.append([pixbuf,name,uri,0])
 
@@ -164,28 +161,32 @@ class Application():
           parent = model.iter_parent(parent)
     
   def on_new_label_entry_activate(self,entry):
-    new_label_entry_text = self.new_label_entry.get_text()
-    if new_label_entry_text != "":
-      self.lfs.create_label(new_label_entry_text)
+    text = self.new_label_entry.get_text()
+    if text != "":
+      self.lfs.create_label(text)
       for label in self.current_path:
-        self.lfs.add_label_to_node(label,new_label_entry_text)
+        self.lfs.add_label_to_node(label,text)
+    self.refresh_tree_view()
 
   def on_new_file_entry_activate(self,entry):
-    new_file_entry_text = self.new_file_entry.get_text()
-    if new_file_entry_text != "":
-      self.lfs.create_file(new_file_entry_text)
+    text = self.new_file_entry.get_text()
+    if text != "":
+      path="%s/%s" % (os.path.expanduser("~"),text)
+      os.system("touch %s" % path)
+      uri="file://%s" % path
+      self.lfs.create_file(uri)
       for label in self.current_path:
-        self.lfs.add_label_to_node(label,new_file_entry_text)
+        self.lfs.add_label_to_node(label,uri)
+    self.refresh_icon_view()
 
   def on_icon_view_drag_data_received(self, widget, drag_context, x, y, data, info, time):
     for uri in data.get_uris():
       uri_path = urllib.url2pathname(urlparse.urlparse(uri)[2])
-      print uri_path
       basename = os.path.basename(uri_path)
       if os.path.isfile(uri_path):
-        self.lfs.create_file(basename,uri)
+        self.lfs.create_file(uri)
         if len(self.current_path)>0:
-          lfs_query = '+["%s"],["%s"]' % ('" | "'.join(self.current_path),basename)
+          lfs_query = '+["%s"],["%s"]' % ('" | "'.join(self.current_path),uri)
           self.lfs.execute(lfs_query)
       elif os.path.isdir(uri_path):
         #Make sure directories in path already exist as labels, creating them
@@ -209,8 +210,9 @@ class Application():
               lfs_query = '+["%s"],["%s"]' % (relative_path_list[i-1],relative_path_list[i])
               self.lfs.execute(lfs_query)
           for file in files:
-            self.lfs.create_file(file,"file://%s/%s" % (root,file))
-            lfs_query = '+["%s"],["%s"]' % ('" | "'.join(relative_path_list),file)
+            uri="file://%s/%s" % (root,file)
+            self.lfs.create_file(uri)
+            lfs_query = '+["%s"],["%s"]' % ('" | "'.join(relative_path_list),uri)
             self.lfs.execute(lfs_query)
     self.refresh_icon_view()
     self.refresh_tree_view()

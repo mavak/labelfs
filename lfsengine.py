@@ -8,7 +8,7 @@ import errno
 import re
 import random
 
-# TODO La "key" d'un node file ha de ser la seva uri, no el seu name. Poden haver dos nodes en el mateix nom, pero no la mateixa uri, tot se consulta per uri..., (etiquetar uri) uri-labeler. No usar un id random!!!
+# TODO La "key" d'un node ha de ser la seva uri, no el seu name. El nom s'extrau de la uri.
 # TODO save labels attached on a file into the xattr of this file
 
 TYPE_LABEL=0
@@ -53,20 +53,15 @@ class LfsEngine():
   def execute(self,le_query_str):
     for r in self.NodeEngine._lfs_query(le_query_str):
       pass
-    
-  def getid(self,name,tyype=-1):
-    return self.NodeEngine.getid(name,tyype)
+
+  def create_label(self,uri):
+    return self.NodeEngine.create_label(uri)
+
+  def create_file(self,uri):
+    return self.NodeEngine.create_file(uri)
   
-  #def get_uri(self, name) # assumir type=FILE
-
-  def exists_node(self,name,tyype=-1):
-    return self.NodeEngine.exists_node(name,tyype)
-
-  def create_label(self,name):
-    return self.NodeEngine.create_label(name)
-
-  def create_file(self,name,uri):
-    return self.NodeEngine.create_file(name,uri)
+  def exists_node(self,uri,tyype=-1):
+    return self.NodeEngine.exists_node(uri,tyype)
 
   def delete_node(self,name):
     self.NodeEngine.delete_node(name)
@@ -102,7 +97,6 @@ class LfsEngine():
     self.NodeEngine.empty_brain()
 
 
-
 class NodeEngine():
   def __init__(self,lfsdb_file):
     lfs={}
@@ -120,10 +114,10 @@ class NodeEngine():
 
   def init_lfs(self,lfs):
     self.lfs=lfs
-    if not 'ids' in self.lfs:
-      self.lfs['ids'] = {}
-    if not 'names' in self.lfs:
-      self.lfs['names'] = {}
+    if not 'nodes' in self.lfs:
+      self.lfs['nodes'] = {}
+    if not 'uris' in self.lfs:
+      self.lfs['uris'] = {}
     if not 'types' in self.lfs:
       self.lfs['types'] = {TYPE_FILE : {},TYPE_LABEL : {}}
     if not 'parents' in self.lfs:
@@ -199,7 +193,7 @@ class NodeEngine():
     if token == rws['not']:
       noot,token = self.noot(token)
       seet,token = self.seet(token)
-      fact = set(self.lfs['ids']) - seet
+      fact = set(self.lfs['nodes']) - seet
     else:
       seet,token = self.seet(token)
       fact = seet
@@ -219,13 +213,13 @@ class NodeEngine():
       token = self._get_token()
       fact,token = self.fact(token)
       for node in fact:
-        if self.lfs['ids'][node]['type']==TYPE_FILE:
+        if self.lfs['nodes'][node]['type']==TYPE_FILE:
           seet = seet | set([node])
     elif token == rws['label']:
       token = self._get_token()
       fact,token = self.fact(token)
       for node in fact:
-        if self.lfs['ids'][node]['type']==TYPE_LABEL:
+        if self.lfs['nodes'][node]['type']==TYPE_LABEL:
           seet = seet | set([node])
     elif token == rws['parent']:
       token = self._get_token()
@@ -250,7 +244,7 @@ class NodeEngine():
         fact2,token = self.fact(token)
       else:
         print "Error token: expected:",rws['sep'], "got:",token
-      self.add_labelids_to_nodeids(fact,fact2)
+      self.add_label_ids_to_node_ids(fact,fact2)
       seet = seet | set(fact) | set(fact2)
     elif token == rws['rem']:
       token = self._get_token()
@@ -261,14 +255,14 @@ class NodeEngine():
         fact2,token = self.fact(token)
       else:
         print "Error token: expected:",rws['sep'], "got:",token
-      self.remove_labelids_from_nodeids(fact,fact2)
+      self.remove_label_ids_from_node_ids(fact,fact2)
       seet = seet | set(fact) | set(fact2)
     elif token == rws['all']:
-      seet = set(self.lfs['ids'])
+      seet = set(self.lfs['nodes'])
       token = self._get_token()
     elif fnmatch(token, '*'):
-      for node in self.lfs['ids']:
-        if self.lfs['ids'][node]['name']==token:
+      for node in self.lfs['nodes']:
+        if self.lfs['nodes'][node]['uri']==token:
           seet = set([node])
       token = self._get_token()
     else:
@@ -325,189 +319,188 @@ class NodeEngine():
     self._query = query_str
     token = self._get_token()
     expr,token = self.expr(token)
-    for nodeid in expr:
-      yield self.lfs['ids'][nodeid]
+    for key in expr:
+      yield self.lfs['nodes'][key]
  
   ##### END INTERPRETER#####
 
 
-  def query(self,le_query_str,offset=-1):
-    for r in self._lfs_query(le_query_str):
-      yield r
 
-  def execute(self,le_query_str):
-    for r in self._lfs_query(le_query_str):
-      pass
-
-  def getid(self,name,tyype=-1):
-    if name in self.lfs['names']:
-      if tyype == -1:
-        return self.lfs['names'][name] # realment esta retornant el id
-      else:
-        if self.lfs['ids'][self.lfs['names'][name]]['type'] == tyype:
-          return self.lfs['names'][name] # realment esta retornant el id
-    return -1
-  
-  #def get_uri(self, name) set_uri# assumir type=FILE
-
-  def exists_node(self,name,tyype=-1):
-    return self.getid(name,tyype)  in self.lfs['ids']
-
-  def create_label(self,name):
-    if name != "":
-      if self.exists_node(name):
+  def create_label(self,uri):
+    if uri != "":
+      if self.exists_node(uri):
         return -errno.EEXIST
-      iid=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
-      self.lfs['ids'][iid]={'name':name,'type':TYPE_LABEL}
-      self.lfs['names'][name]=iid
-      self.lfs['parents'][iid] = {}
-      self.lfs['childs'][iid] = {}
-      self.lfs['types'][TYPE_LABEL][iid] = 1
-      return iid
+      id=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
+      self.lfs['nodes'][id]={'uri':uri, 'type':TYPE_LABEL}
+      self.lfs['types'][TYPE_LABEL][id] = 1
+      self.lfs['uris'][uri] = id
+      self.lfs['parents'][id] = {}
+      self.lfs['childs'][id] = {}
 
-  def create_file(self,name,uri):
-    if name!= "":
-      if self.exists_node(name):
+      return uri
+
+  def create_file(self,uri):
+    if uri!= "":
+      if self.exists_node(uri):
         return -errno.EEXIST
-      iid=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
+      id=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
       #q_uri=urllib.quote(uri)
-      print "creating file ",name,", with ",uri
-      self.lfs['ids'][iid]={'name':name,'type':TYPE_FILE, 'uri':uri}
-      self.lfs['names'][name]=iid
-      self.lfs['parents'][iid] = {}
-      self.lfs['types'][TYPE_FILE][iid] = 1
-      return iid
+      self.lfs['nodes'][id]={'uri':uri, 'type':TYPE_FILE}
+      self.lfs['types'][TYPE_FILE][id] = 1
+      self.lfs['uris'][uri] = id
+      self.lfs['parents'][id] = {}
+      return uri
 
-  def delete_node(self,name):
-    nodeid = self.getid(name)
-    if nodeid in self.lfs['ids']:
-      del self.lfs['ids'][nodeid]
+  def get_id(self,uri,tyype=-1):
+    if uri in self.lfs['uris']:
+      id=self.lfs['uris'][uri]
+      if tyype == -1:
+        return id
+      elif self.lfs['nodes'][id]['type'] == tyype:
+        return id
+    return 0
+  
+  def exists_node(self,uri,tyype=-1):
+    if self.get_id(uri,tyype):
+      return 1
+    return 0
+
+  def delete_node(self,uri):
+    id=get_id(uri)
+    if id in self.lfs['nodes']:
+      del self.lfs['nodes'][id]
       
-      if nodeid in self.lfs['parents']:
-        for parent in self.lfs['parents'][nodeid]: 
-          del self.lfs['childs'][parent][nodeid]
-        del self.lfs['parents'][nodeid]
-        
-      if nodeid in self.lfs['childs']:
-        for child in self.lfs['childs'][nodeid]: 
-          del self.lfs['parents'][child][nodeid]
-        del self.lfs['childs'][nodeid]
-        
-      if nodeid in self.lfs['types'][TYPE_LABEL]:
-        del self.lfs['types'][TYPE_LABEL][nodeid]
-        
-      if nodeid in self.lfs['types'][TYPE_FILE]:
-        del self.lfs['types'][TYPE_FILE][nodeid]
-        
-      if name in self.lfs['names']:
-        del self.lfs['names'][name]
+    if id in self.lfs['parents']:
+      for parent in self.lfs['parents'][id]: 
+        if parent in self.lfs['childs']:
+          if id in self.lfs['childs'][id]:
+            del self.lfs['childs'][parent][id]
+      del self.lfs['parents'][id]
+      
+    if id in self.lfs['childs']:
+      for child in self.lfs['childs'][id]:
+        if child in self.lfs['parents']:
+          if id in self.lfs['parents'][child]:
+            del self.lfs['parents'][child][id]
+      del self.lfs['childs'][id]
+      
+    if id in self.lfs['types'][TYPE_LABEL]:
+      del self.lfs['types'][TYPE_LABEL][id]
+    elif id in self.lfs['types'][TYPE_FILE]:
+      del self.lfs['types'][TYPE_FILE][id]
 
-  def rename_node(self,old_name,new_name):
-    if old_name != '' and new_name != '':
-      if self.exists_node(new_name):
+    if uri in self.lfs['uris']:
+      del self.lfs['uris'][uri]
+
+  def change_uri(self,old_uri,new_uri):
+    if old_uri != '' and new_uri != '':
+      if self.exists_node(new_uri):
         return -errno.EEXIST
-      iid=self.getid(old_name)
-      if iid in self.lfs['ids']:
-        del self.lfs['names'][old_name]
-        self.lfs['ids'][iid]['name']=new_name
-        self.lfs['names'][new_name] = iid
+      id=self.get_id(old_uri)
+      if id in self.lfs['nodes']:
+        del self.lfs['uris'][old_uri]
+        self.lfs['nodes'][id]['uri']=new_uri
+        self.lfs['uris'][new_uri] = id
 
-  def exists_relation(self,parentid,childid):
+  def exists_relation(self,parent_id,child_id):
     # TODO: controlar que no s'inserte una relacio ciclica (funcio recursiva)
-    return childid in self.lfs['parents'] and parentid in self.lfs['parents'][childid]
-    #or/and self.lfs['childs'][parentid][childid]
+    return child_id in self.lfs['parents'] and parent_id in self.lfs['parents'][child_id]
+    #or/and self.lfs['childs'][parent_id][child_id]
 
-  def add_labelids_to_nodeids(self,parentids,childids):
-    for childid in childids:
-      if childid in self.lfs['ids']:        
-        for parentid in parentids:
-          if parentid != childid and parentid in self.lfs['ids'] and self.lfs['ids'][parentid]['type'] == TYPE_LABEL \
-          and not self.exists_relation(childid,parentid):
-            self.lfs['parents'][childid][parentid]=1
-            self.lfs['childs'][parentid][childid]=1
+  def add_label_ids_to_node_ids(self,parent_ids,child_ids):
+    for child_id in child_ids:
+      if child_id in self.lfs['nodes']:        
+        for parent_id in parent_ids:
+          if parent_id != child_id and parent_id in self.lfs['nodes'] and self.lfs['nodes'][parent_id]['type'] == TYPE_LABEL \
+          and not self.exists_relation(child_id,parent_id):
+            self.lfs['parents'][child_id][parent_id]=1
+            self.lfs['childs'][parent_id][child_id]=1
+
+  def remove_label_ids_from_node_ids(self,parent_ids,child_ids):
+    for child_id in child_ids:
+      for parent_id in parent_ids:            
+        if parent_id != child_id:
+          if 'parents' in self.lfs and child_id in self.lfs['parents'] and parent_id in self.lfs['parents'][child_id]:
+            del self.lfs['parents'][child_id][parent_id]
+          if 'childs' in self.lfs and parent_id in self.lfs['childs'] and child_id in self.lfs['childs'][parent_id]:
+            del self.lfs['childs'][parent_id][child_id]
+
+
 
   def add_label_to_node(self,parent,child):
-    childid = self.getid(child)
-    parentid = self.getid(parent,TYPE_LABEL)            
-    self.add_labelids_to_nodeids([parentid],[childid])
+    child_id = self.get_id(child)
+    parent_id = self.get_id(parent,TYPE_LABEL)            
+    self.add_label_ids_to_node_ids([parent_id],[child_id])
 
   def add_labels_to_node(self,parents,child):
-    childid = self.getid(child)
-    parentids = []
+    child_id = self.get_id(child)
+    parent_ids = []
     for parent in parents:
-      parentid = self.getid(parent,TYPE_LABEL)            
-      parentids.append(parentid)
-    self.add_labelids_to_nodeids(parentids,[childid])
+      parent_id = self.get_id(parent,TYPE_LABEL)            
+      parent_ids.append(parent_id)
+    self.add_label_ids_to_node_ids(parent_ids,[child_id])
 
   def add_labels_to_nodes(self,parents,childs):
-    childids = []
-    parentids = []
+    child_ids = []
+    parent_ids = []
     for child in childs:
-      childid = self.getid(child)
-      childids.append(childid)
+      child_id = self.get_id(child)
+      child_ids.append(child_id)
     for parent in parents:
-      parentid = self.getid(parent,TYPE_LABEL)
-      parentids.append(parentid)
-    self.add_labelids_to_nodeids(parentids,childids)
-
-  def remove_labelids_from_nodeids(self,parentids,childids):
-    for childid in childids:
-      for parentid in parentids:            
-        if parentid != childid:
-          if 'parents' in self.lfs and childid in self.lfs['parents'] and parentid in self.lfs['parents'][childid]:
-            del self.lfs['parents'][childid][parentid]
-          if 'childs' in self.lfs and parentid in self.lfs['childs'] and childid in self.lfs['childs'][parentid]:
-            del self.lfs['childs'][parentid][childid]
+      parent_id = self.get_id(parent,TYPE_LABEL)
+      parent_ids.append(parent_id)
+    self.add_label_ids_to_node_ids(parent_ids,child_ids)
 
   def remove_label_from_node(self,parent,child):
-    childid = self.getid(child)
-    parentid = self.getid(parent,TYPE_LABEL)
-    self.remove_labelids_from_nodeids([parentid],[childid])
+    child_id = self.get_id(child)
+    parent_id = self.get_id(parent,TYPE_LABEL)
+    self.remove_label_ids_from_node_ids([parent_id],[child_id])
 
   def remove_labels_from_node(self,parents,child):
-    childid = self.getid(child)
-    parentids = []
+    child_id = self.get_id(child)
+    parent_ids = []
     for parent in parents:
-      parentid = self.getid(parent,TYPE_LABEL)
-      parentids.append(parentid)
-      self.remove_labelids_from_nodeids(parentids,[childid])
+      parent_id = self.get_id(parent,TYPE_LABEL)
+      parent_ids.append(parent_id)
+      self.remove_label_ids_from_node_ids(parent_ids,[child_id])
 
   def remove_labels_from_nodes(self,parents,childs):
-    childids = []
-    parentids = []
+    child_ids = []
+    parent_ids = []
     for child in childs:
-      childid = self.getid(child)
-      childids.append(childid)
+      child_id = self.get_id(child)
+      child_ids.append(child_id)
     for parent in parents:
-      parentid = self.getid(parent,TYPE_LABEL)
-      parentids.append(parentid)
-    self.remove_labelids_to_nodeids(parentids,childids)
+      parent_id = self.get_id(parent,TYPE_LABEL)
+      parent_ids.append(parent_id)
+    self.remove_label_ids_to_node_ids(parent_ids,child_ids)
 
 
   def printlfs(self):
     print "@#@ NODES @#@"
-    print self.lfs
+    for id in self.lfs['nodes']:
+      print "ID:",id,"uri",self.lfs['nodes'][id]['uri'],"type",self.lfs['nodes'][id]['type']
     print
     print "~&~ RELATIONS ~&~"
     print "      && PARENTS &&"
-    for childid in self.lfs['parents']:
+    for child_id in self.lfs['parents']:
       tyype = "#"
-      if self.lfs['ids'][childid]['type'] == TYPE_LABEL: tyype = "@"
-      print "OF",tyype,childid,self.lfs['ids'][childid]['name'],":"
-      for parentid in self.lfs['parents'][childid]:
-        print "       @",parentid,self.lfs['ids'][parentid]['name']
+      if self.lfs['nodes'][child_id]['type'] == TYPE_LABEL: tyype = "@"
+      print "OF",tyype,child_id,self.lfs['nodes'][child_id]['uri'],":"
+      for parent_id in self.lfs['parents'][child_id]:
+        print "       @",parent_id,self.lfs['nodes'][parent_id]['uri']
     print "      ~~ CHILDS ~~"
-    for parentid in self.lfs['childs']:
-      print "OF @",parentid,self.lfs['ids'][parentid]['name'],":"
-      for childid in self.lfs['childs'][parentid]:
+    for parent_id in self.lfs['childs']:
+      print "OF @",parent_id,self.lfs['nodes'][parent_id]['uri'],":"
+      for child_id in self.lfs['childs'][parent_id]:
         tyype = "@"
-        if self.lfs['ids'][childid]['type'] == TYPE_LABEL: tyype = "@"
-        print "      ",tyype,parentid,self.lfs['ids'][childid]['name']
+        if self.lfs['nodes'][child_id]['type'] == TYPE_LABEL: tyype = "@"
+        print "      ",tyype,parent_id,self.lfs['nodes'][child_id]['uri']
 
 
   def empty_brain(self):
-    self.lfs['ids'] = {}
-    self.lfs['names'] = {}
+    self.lfs['nodes'] = {}
+    self.lfs['nodes'] = {}
     self.lfs['types'] = {TYPE_FILE : {},TYPE_LABEL : {}}
     self.lfs['parents'] = {}
     self.lfs['childs'] = {}
@@ -518,27 +511,16 @@ def usage():
   labelfs lfs.db --empty-brain
 """
 if __name__ == "__main__":
-  import os
+  import os.path
   import sys
-  from os.path import isfile,isdir,dirname,basename
-  if len(sys.argv)>1:
-    if isdir(sys.argv[1]):
-      le = LfsEngine(sys.argv[1])
-  
-  if len(sys.argv)>2:
-    if sys.argv[2] == '--empty_brain':
-      le.empty_brain()
-    elif sys.argv[2] == "--print":
-      le.printlfs()
-    elif sys.argv[2] == '-t':
-      le.create_label(sys.argv[3])
-    elif sys.argv[2] == '-f':
-      le.create_file(sys.argv[3])
-    else:
-      print "::::nodes::::"    
-      nodes = le.query(sys.argv[2])
-      count = 0
-      for r in nodes:
-        print r
-        count += 1
-      print "Total:",count
+  le = LfsEngine("%s/.lfs.db" % os.path.expanduser('~'))
+  if len(sys.argv)==1:
+    le.printlfs()  
+  if len(sys.argv)==2:
+    print "::::nodes::::"    
+    nodes = le.query(sys.argv[1])
+    count = 0
+    for r in nodes:
+      print r
+      count += 1
+    print "Total:",count
