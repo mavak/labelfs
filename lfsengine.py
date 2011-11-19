@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import os
 import shelve
 import atexit
 from fnmatch import fnmatch
@@ -7,9 +8,8 @@ import errno
 import re
 import random
 
-# ./labelengine.py -d -o lfsdb=/path/to/lfs.db "query"
+# TODO La "key" d'un node file ha de ser la seva uri, no el seu name. Poden haver dos nodes en el mateix nom, pero no la mateixa uri, tot se consulta per uri..., (etiquetar uri) uri-labeler. No usar un id random!!!
 # TODO save labels attached on a file into the xattr of this file
-# la "key" d'un node file ha de ser la seva uri, no el seu name. Poden haver dos nodes en el mateix nom, pero no la mateixa uri, tot se consulta per uri..., (etiquetar uri) uri-labeler
 
 TYPE_LABEL=0
 TYPE_FILE=1
@@ -153,21 +153,16 @@ class NodeEngine():
             token=rw
             pos+=len(rw)
             break
-    if token=='' and pos<length  \
-    and  (query[pos]=='"'): 
+    if token=='' and pos<length and  (query[pos]=='"'): 
       pos+=1
-      while pos < length and fnmatch(query[pos],'*')  \
-      and query[pos]!='"':
-        if query[pos]=="\\"  \
-        and (query[pos+1]=='"'  \
-        or query(pos+1)=="'"):
+      while pos < length and fnmatch(query[pos],'*') and query[pos]!='"':
+        if query[pos]=="\\" and (query[pos+1]=='"' or query(pos+1)=="'"):
           token+=query[pos+1]
           pos+=2
         else:
           token+=query[pos]
           pos+=1
-      if pos<length  \
-      and (query[pos]=="\""):
+      if pos<length and (query[pos]=="\""):
         pos+=1
       else:
         print "error token",query,"[",pos,"]"
@@ -343,7 +338,6 @@ class NodeEngine():
   def execute(self,le_query_str):
     for r in self._lfs_query(le_query_str):
       pass
-    
 
   def getid(self,name,tyype=-1):
     if name in self.lfs['names']:
@@ -376,6 +370,8 @@ class NodeEngine():
       if self.exists_node(name):
         return -errno.EEXIST
       iid=(("%%0%dX" % (8 * 2)) % random.getrandbits(8 * 8)).decode("ascii") #TODO lenght
+      #q_uri=urllib.quote(uri)
+      print "creating file ",name,", with ",uri
       self.lfs['ids'][iid]={'name':name,'type':TYPE_FILE, 'uri':uri}
       self.lfs['names'][name]=iid
       self.lfs['parents'][iid] = {}
@@ -528,6 +524,7 @@ if __name__ == "__main__":
   if len(sys.argv)>1:
     if isdir(sys.argv[1]):
       le = LfsEngine(sys.argv[1])
+  
   if len(sys.argv)>2:
     if sys.argv[2] == '--empty_brain':
       le.empty_brain()

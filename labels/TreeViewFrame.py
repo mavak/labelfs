@@ -15,8 +15,7 @@ class TreeViewFrame(Gtk.Frame):
     self.tree_view = TreeView()
     self.win = Gtk.ScrolledWindow()
     self.win.add(self.tree_view)
-    self.table.attach(self.win,0,1,1,2) #,Gtk.AttachOptions.FILL,Gtk.AttachOptions.EXPAND)
-
+    self.table.attach(self.win,0,1,1,2)
 
 class TreeView(Gtk.TreeView):
   def __init__(self):
@@ -42,29 +41,10 @@ class TreeView(Gtk.TreeView):
                   [('text/plain', 0, 0)],
                   Gdk.DragAction.DEFAULT | Gdk.DragAction.MOVE)
 
-  def refresh_iter(self,tree_iter,nodes):
-    if tree_iter != None:
-      child = self.tree_store.iter_children(tree_iter)
-      # anem en compte de no eliminar tots els children
-      # eliminem l'ultim despres d'afegir els nous
-      while self.tree_store.iter_n_children(tree_iter) > 1:
-        child_name = self.tree_store.get_value(child,0)
-        self.tree_store.remove(child)
-        child=self.tree_store.iter_children(tree_iter)
-      for node in nodes:
-        if 'name' in node:
-          parent2=self.tree_store.append(tree_iter, (node['name'],))
-          parent3=self.tree_store.append(parent2, ('.',))
-      if child != None:
-        self.tree_store.remove(child)
-
-
-
 class NewNodeBar(Gtk.Box):
   def __init__(self):
     Gtk.Toolbar.__init__(self)
     self.get_style_context().add_class("new-node-bar")
-    #context = toolbar.get_style_context()
     self.new_label_entry=NewLabelEntry()
     self.add(self.new_label_entry)
     self.new_file_entry=NewFileEntry()

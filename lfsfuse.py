@@ -2,12 +2,8 @@
 # -*- coding: utf-8 -*-
 import fuse # No ve per defecte en Ubuntu!
 import lfsengine
-import stat
-import os    
-
-from os.path import realpath,isfile,isdir,basename,dirname,join,exists,normpath,expanduser
+import os,sys,stat,urlparse
 import errno
-import sys
 from threading import RLock
 
 fuse.fuse_python_api = (0, 2)
@@ -51,17 +47,17 @@ def usage():
 
   See UserGuide in: code.google.com/p/labelfs
   
-  """.format(prog = basename(sys.argv[0]))
+  """.format(prog = os.path.basename(sys.argv[0]))
 
 class LabelFs(fuse.Fuse):
   def __init__(self, *args, **kw):
-    self.lfsdb = "%s/.lfs.db" % expanduser('~')
+    self.lfsdb = "%s/.lfs.db" % os.path.expanduser('~')
     fuse.Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
     self.flags = 0
     self.multithreaded = True
     self.parser.add_option(mountopt="lfsdb", metavar="PATH", default=self.lfsdb, help="use filesystem from under PATH [default:  default]")
     self.parse(values=self, errex=1)
-    self.lfsdbdir = dirname(self.lfsdb)
+    self.lfsdbdir = os.path.dirname(self.lfsdb)
     self.le = lfsengine.LfsEngine(self.lfsdb)
     
   def main(self, *a, **kw):
@@ -78,7 +74,7 @@ class LabelFs(fuse.Fuse):
         return -errno.ENOENT
       else:
         return os.lstat("%s" % (self.lfsdb))
-    bn = basename(path)
+    bn = os.path.basename(path)
     if bn != '':
       pl = self.pathlist(path)
       lenpl = len(pl)
@@ -94,7 +90,9 @@ class LabelFs(fuse.Fuse):
           le_query = '~"%s" & <"%s"' % (bn,'" & <"'.join(pl[1:]))  
         for node in self.le.query(le_query):
           if 'uri' in node:
-            return os.lstat(node['uri'])
+            path_of_file=urlparse.urlparse(node['uri'])[2]
+            print "path_of_file=",path_of_file
+            return os.lstat(path_of_file)
       return -errno.ENOENT
     return os.lstat(self.lfsdbdir)
 
@@ -120,53 +118,56 @@ class LabelFs(fuse.Fuse):
       
   def access(self, path, mode):
     uri = ""
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        if not os.access(node['uri'], mode):
+        print "nodeuri_parsed:",urlparse.urlparse(node['uri'])[2]
+        if not os.access(urlparse.urlparse(node['uri'])[2], mode):
           return -errno.EACCES
   
   def open (self, path, flags):
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        return self.LabelFsFile(node['uri'], flags)
+        return self.LabelFsFile(urlparse.urlparse(node['uri'])[2], flags)
       
   def readlink(self, path):
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        return os.readlink(node['uri'])
+        return os.readlink(urlparse.urlparse(node['uri'])[2])
   
   def mknod(self, path, mode, dev):
-    bn = basename(path)
-    dl = self.pathlist(dirname(path))
-    uri = "%s/%s" % (self.lfsdbdir,bn)
+    bn = os.path.basename(path)
+    dl = self.pathlist(os.path.dirname(path))
+    path = "%s/%s" % (self.lfsdbdir,bn)
+    uri = "file://%s" % path
     self.le.create_file(bn,uri)
     if len(dl)>0:
       le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
       self.le.execute(le_query)
-    os.mknod(uri, mode, dev)
+    os.mknod(path, mode, dev)
     
-  def create (self, path, fi_flags, mode):
-    bn = basename(path)
-    dl = self.pathlist(dirname(path))
-    uri = "%s/%s" % (self.lfsdbdir,bn)
+  def create(self, path, fi_flags, mode):
+    bn = os.path.basename(path)
+    dl = self.pathlist(os.path.dirname(path))
+    path = "%s/%s" % (self.lfsdbdir,bn)
+    uri = "file://%s" % path
     self.le.create_file(bn,uri)
     if len(dl)>0:
       le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
       self.le.execute(le_query)
-    f = self.LabelFsFile(uri, fi_flags, mode)
+    f = self.LabelFsFile(path, fi_flags, mode)
     return f
   
   def utime(self, path, times):
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        os.utime(node['uri'], times)
+        os.utime(urlparse.urlparse(node['uri'])[2], times)
 
   def unlink(self, path):
-    bn = basename(path)
+    bn = os.path.basename(path)
     #for node in self.le.query('"%s"' % bn):
     #  if 'uri' in node:
-    #    if exists(node['uri']): 
-    #      os.unlink(node['uri'])
+    #    if os.path.exists(urlparse.urlparse(node['uri'])[2]): 
+    #      os.unlink(urlparse.urlparse(node['uri'])[2])
     self.le.delete_node(bn)
   
   def mkdir(self, path, mode):
@@ -174,8 +175,8 @@ class LabelFs(fuse.Fuse):
     if execute_prefix_position>-1:
        self.le.execute(path[execute_prefix_position+EXECUTE_PREFIX_LEN:])
     else:
-      bn = basename(path)
-      dl = self.pathlist(dirname(path))
+      bn = os.path.basename(path)
+      dl = self.pathlist(os.path.dirname(path))
       self.le.create_label(bn)
       if len(dl)>0: 
         le_query = '+["%s"],["%s"]' % ('" | "'.join(dl[-1:]),bn)
@@ -184,56 +185,57 @@ class LabelFs(fuse.Fuse):
       self.le.execute(le_query)
       
   def rmdir(self, path):
-    bn = basename(path)
+    bn = os.path.basename(path)
     self.le.delete_node(bn)
 
   def symlink(self, target, link):
-    bn = basename(link)
-    dl = self.pathlist(dirname(link))
-    if isfile(target):
-      self.le.create_file(bn,target)
-      if len(dl)>0:
-        le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
+    link_basename = os.path.basename(link)
+    link_path_list = self.pathlist(os.path.dirname(link))
+    if os.path.isfile(target):
+      target_uri="file://%s" % target
+      self.le.create_file(link_basename,target_uri)
+      if len(link_path_list)>0:
+        le_query = '+["%s"],["%s"]' % ('" | "'.join(link_path_list),link_basename)
         self.le.execute(le_query)
     else:
-      for i in range(len(dl)): 
-        self.le.create_label(dl[i])
-        le_query = '+["%s"],["%s"]' % (dl[i-1],dl[i])
-        self.le.execute('+["%s"],["%s"]' % ('" | "'.join(dl[:i]),dl[i]))
-      for r,d,fs in os.walk(target):
-        rel = r.replace(target,"")
-        dl = self.pathlist(rel)
-        for i in range(len(dl)):
-          self.le.create_label(dl[i])
+      for i in range(len(link_path_list)): 
+        self.le.create_label(link_path_list[i])
+        le_query = '+["%s"],["%s"]' % (link_path_list[i-1],link_path_list[i])
+        self.le.execute('+["%s"],["%s"]' % ('" | "'.join(link_path_list[:i]),link_path_list[i]))
+      for root,directory,files in os.walk(target):
+        target_relative_path_list = self.pathlist(root.replace(target,""))
+        for i in range(len(target_relative_path_list)):
+          self.le.create_label(target_relative_path_list[i])
           if i > 0:
-            le_query = '+["%s"],["%s"]' % (dl[i-1],dl[i])
+            le_query = '+["%s"],["%s"]' % (target_relative_path_list[i-1],target_relative_path_list[i])
             self.le.execute(le_query)
-        for f in fs:
-          self.le.create_file(f,"%s/%s" % (r,f))
-          le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),f)
+        for file in files:
+          target_uri="file://%s" % target
+          self.le.create_file(f,"file://%s/%s" % (root,file))
+          le_query = '+["%s"],["%s"]' % ('" | "'.join(relative_path_list),file)
           self.le.execute(le_query)
 
   def link(self, target, link):
-    if isfile(link):
-      bn = basename(link)
-      dl = self.pathlist(dirname(link))
-      self.le.create_file(bn,target)
+    if os.path.isfile(link):
+      bn = os.path.basename(link)
+      dl = self.pathlist(os.path.dirname(link))
+      self.le.create_file(bn,"file://%s" % target)
       if len(dl)>0:
         le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),bn)
         self.le.execute(le_query)
           
   def rename(self, old, new):
-    oldbn = basename(old)
-    newbn = basename(new)
+    oldbn = os.path.basename(old)
+    newbn = os.path.basename(new)
     execute_prefix_position = newbn.find(EXECUTE_PREFIX)
     if execute_prefix_position>-1:
       self.le.execute(newbn[execute_prefix_position:])
       self.le.delete_node(oldbn)
-      if exists("%s/%s" % (self.lfsdb,oldbn)): 
+      if os.path.exists("%s/%s" % (self.lfsdb,oldbn)): 
         os.rmdir("%s/%s" % (self.lfsdb,oldbn))
     else:
-      olddn = dirname(old)
-      newdn = dirname(new)
+      olddn = os.path.dirname(old)
+      newdn = os.path.dirname(new)
       olddl = self.pathlist(olddn)
       newdl = self.pathlist(newdn)
       isfileoldbn = self.le.exists_node(oldbn,lfsengine.TYPE_FILE)
@@ -263,18 +265,18 @@ class LabelFs(fuse.Fuse):
             self.le.execute(le_query)
 
   def chmod(self, path, mode):
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        os.chmod(node['uri'], mode)
+        os.chmod(urlparse.urlparse(node['uri'])[2], mode)
 
   def chown(self, path, user, group):
-    for node in self.le.query('"%s"' % basename(path)):
+    for node in self.le.query('"%s"' % os.path.basename(path)):
       if 'uri' in node:
-        os.chown(node['uri'], user, group)
+        os.chown(urlparse.urlparse(node['uri'])[2], user, group)
 
   def truncate(self, path, lenght):
-    for node in self.le.query('"%s"' % basename(path)):  
-      f = open(node['uri'], "a")
+    for node in self.le.query('"%s"' % os.path.basename(path)):  
+      f = open(urlparse.urlparse(node['uri'])[2], "a")
       f.truncate(lenght)
       f.close()
   

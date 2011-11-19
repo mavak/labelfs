@@ -37,7 +37,7 @@ class Window(Gtk.Window):
     self.query_view_frame = QueryViewFrame.QueryViewFrame()
     self.three_paned.add_center(self.query_view_frame)
 
-    #.selected_nodes_frame = SelectedNodesFrame()
+    #self.selected_nodes_frame = SelectedNodesFrame.SelectedNodesFrame()
     #self.three_paned.add_right(self.selected_nodes_frame)
         
     self.set_focus(self.query_view_frame.icon_view)

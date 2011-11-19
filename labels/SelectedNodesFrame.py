@@ -16,4 +16,7 @@ class SelectedNodeBox(Gtk.Box):
     Gtk.Box.__init__(self)
     self.get_style_context().add_class("selected-node-panel")    
 
-    self.set_size_request(180,-1)
+    #self.set_size_request(180,-1)
+    self.label = Gtk.Label()
+    self.add(self.label)
+

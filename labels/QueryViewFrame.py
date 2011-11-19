@@ -1,5 +1,7 @@
 from gi.repository import Gtk, Gdk, GdkPixbuf
 
+#import Thumbnailer
+
 class QueryViewFrame(Gtk.Frame):
   def __init__(self):
     Gtk.Frame.__init__(self)
@@ -19,7 +21,7 @@ class QueryViewFrame(Gtk.Frame):
 
 class IconView(Gtk.IconView):
   def __init__(self):
-    self.list_store = Gtk.ListStore(GdkPixbuf.Pixbuf,str)
+    self.list_store = Gtk.ListStore(GdkPixbuf.Pixbuf,str,str,int)
     Gtk.IconView.__init__(self,model=self.list_store)
     self.get_style_context().add_class("icon-view")    
  
@@ -38,11 +40,10 @@ class IconView(Gtk.IconView):
       Gdk.DragAction.MOVE )
     self.drag_dest_add_uri_targets()
 
-  def refresh(self,nodes):
-    for node in nodes:
-      pixbuf = self.render_icon(Gtk.STOCK_FILE, Gtk.IconSize.DIALOG, None)
-      self.list_store.append([pixbuf,node['name'].replace("&","")])
-
+    #self.thumbnailer = Thumbnailer.Thumbnailer(self)
+    #self.rlock = self.thumbnailer.rlock
+    #self.thumbnailer.setDaemon(True)
+    #self.thumbnailer.start()
 
 class LocationBar(Gtk.Frame):
   def __init__(self):
@@ -53,16 +54,5 @@ class LocationBar(Gtk.Frame):
     self.toolbar=Gtk.Toolbar()
     self.toolbar.set_style(Gtk.ToolbarStyle.TEXT)
     self.toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR)
-    self.add(self.toolbar)
-
-  def refresh(self,path):
-    for child in self.toolbar.get_children():
-      self.toolbar.remove(child)
-    for node in path:
-      ttb = Gtk.ToggleToolButton(label=node)
-      ttb.get_style_context().add_class("location-button")
-      ttb.set_active(1)
-      self.toolbar.add(ttb)
-    self.show_all()
-   
+    self.add(self.toolbar)   
 
