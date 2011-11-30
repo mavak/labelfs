@@ -26,7 +26,7 @@ class Window(Gtk.Window):
     Gtk.Window.__init__(self, title="Labels")
     self.get_style_context().add_class("window")    
     
-    self.set_default_size(800,600)
+    self.set_default_size(600,400)
         
     self.three_paned = ThreePaned()
     self.add(self.three_paned)

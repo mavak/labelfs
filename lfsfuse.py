@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import fuse # No ve per defecte en Ubuntu!
-import lfsengine
+import URIGraph
 import os,sys,stat,urlparse
 import errno
 from threading import RLock
@@ -11,43 +11,47 @@ fuse.fuse_python_api = (0, 2)
 # ¿si dos cançons estan en posicions diferents en dos cd's
 # com salvem el fet de que per a ordenar-les estem acostumats a canviarles de nom?
 # Fa falta tindre algo més en compte a l'hora de fer relacions que la posicio? el temps? grau d'afinitat?
-# quan se crea un node la part "1 - " del nom fa que automàticament se cree la etiqueta "`1` + " - " + pathlist[-1]" i s'apega al node, a aquesta etiqueta se li apega pathlist[-1]. El node s'ha de crear sense el "1 - "
+# quan se crea un node la part "1 - " del nom fa que automàticament se cree la etiqueta "`1` + " - " + path2labels[-1]" i s'apega al node, a aquesta etiqueta se li apega path2labels[-1]. El node s'ha de crear sense el "1 - "
 
-# eliminar lfs-store, *com a molt utilitzarlo per a guardar els shelves (com a collections o biblioteques...). Quan se cree un "fitxer" en el engine se guardarà la uri, i es la que usarem com a path.
+#TODO: roots, rename, symlink, ...
 
+QUERY_PATH = 'query'
+QUERY_PATH_LEN = len(QUERY_PATH)
 
-
-EXECUTE_PREFIX = '$$'
-EXECUTE_PREFIX_LEN = len(EXECUTE_PREFIX)
 
 def pathlist(path):
   return [node for node in path.split('/') if node != ""]
 
+def uri2path(uri):
+  if uri.find("label://")==0:
+    return uri[8:]
+  else:
+    return urlparse.urlparse(uri)[2]
 
 def usage():
   return """
-  LabelFS - fuse filesystem for organizing files in a Directed Graph of labels
+  LabelFS - fuse filesystem for organizing URIs in a Directed Graph
   Author: Gerard Falco (gerardfalco@gmail.com)
   
   USAGE (command line):
   
-    {prog} [-f] [-d] -o lfsdb=<lfsdb> <mp>
-  
+    {prog} [-f] [-d] -o graphdb=<graphdb> <mp>
+ 
   USAGE (fstab):
   
     {prog}# <mp> fuse allow_other[,<options>] 0 0
   
   PARAMETERS:
   
-    lfs-db: lfs database file 
+    graph: URIGraph database file 
     mp: mount point
-    options: labelfs-specific options
+    options: GraphFS-specific options
     -f: no-fork mode
     -d: debug mode
   
   DESCRIPTION
   
-  LabelFS implements a filesystem for organizing files in a directed graph of labels.
+  GraphFS implements a filesystem for organizing URIS in a directed graph.
 
   See UserGuide in: code.google.com/p/labelfs
   
@@ -55,228 +59,228 @@ def usage():
 
 class LabelFs(fuse.Fuse):
   def __init__(self, *args, **kw):
-    self.lfsdb = "%s/.lfs.db" % os.path.expanduser('~')
+    self.lfsdir = "%s/.lfs/" % os.path.expanduser('~')
     fuse.Fuse.__init__(self, version=kw['version'],usage=kw['usage'])
     self.flags = 0
     self.multithreaded = True
-    self.parser.add_option(mountopt="lfsdb", metavar="PATH", default=self.lfsdb, help="use filesystem from under PATH [default:  default]")
+    self.parser.add_option(mountopt="lfsdir", metavar="PATH", default=self.lfsdir, help="use filesystem from under PATH [default:  default]")
     self.parse(values=self, errex=1)
-    self.lfsdbdir = os.path.dirname(self.lfsdb)
-    self.le = lfsengine.LfsEngine(self.lfsdb)
+
+    self.urigraph = URIGraph.URIGraph("%s/lfs.graph" % self.lfsdir)
     
   def main(self, *a, **kw):
     self.file_class = self.LabelFsFile
     fuse.Fuse.main(self, *a, **kw)
     return 0
 
-  def get_uris(self,path):
-    if path == "/":
-      yield "file://%s" % self.lfsdbdir
-    else:
-      pl = pathlist(path)
-      lenpl = len(pl)
-      le_query = '*'
-      if lenpl > 1:
-        le_query_labels = '#* & <#"%s"%s' % ('"& <[#"'.join(pl), ']'*(len(pl)-1))
-        le_query_files = '~* & <"%s"' % ('" & <"'.join(pl[1:]))
-        le_query = "%s | %s" % (le_query_labels, le_query_files)
-      for node in self.le.query(le_query):
-        path_of_node=urlparse.urlparse(node['uri'])[2]        
-        if os.path.basename(path_of_node) == os.path.basename(path):
-          yield node['uri']
-
-
-  def get_uri(self,path):
-    for uri in self.get_uris(path):
+  ##
+  def query_uri(self,path):
+    basename = os.path.basename(path)
+    dirs = pathlist(os.path.dirname(path))
+    query = '"%s"' % basename
+    if len(dirs) > 0:
+      query = 'label:"%s" > label:"%s"' % (dirs[-1],basename)  
+      for uri in self.urigraph.query(query):
+        return uri
+      query = 'label:["%s"] > file:"%s"' % ('" | "'.join(dirs),basename)
+    for uri in self.urigraph.query(query):
       return uri
-    return ""
 
-  def getattr (self, path):
-    if path.find(EXECUTE_PREFIX)>-1:
-      if path.find('+')>-1 or path.find('-')>-1:
-        return -errno.ENOENT
-      else:
-        return os.lstat("%s" % (self.lfsdb))
-    if path != '/':
-      uri = self.get_uri(path)
-      if uri != "":
-        pl = pathlist(path)
-        lenpl = len(pl)
-        le_query = '"%s" & ^<#*' % uri
-        pl.reverse()
-        if self.le.exists_node(uri,lfsengine.TYPE_LABEL):
-          return os.lstat(self.lfsdbdir)
-        elif self.le.exists_node(uri,lfsengine.TYPE_FILE):
-          path_of_file=urlparse.urlparse(uri)[2]
-          return os.lstat(path_of_file)
-      return -errno.ENOENT
-    return os.lstat(self.lfsdbdir)
+  def realpath(self,path):
+    if path == '/':
+      return os.path.expanduser('~')
+    uri=self.query_uri(path)
+    if uri:
+      uri_path=uri2path(uri)
+      if os.path.basename(uri_path) == os.path.basename(path):
+        if uri.find('label://') == 0:
+          return self.lfsdir
+        else:
+          return uri_path
+    return "-1"
+  ##
+
+  def getattr(self, path):
+    QP_pos = path.find(QUERY_PATH)
+    if QP_pos>-1 and QP_pos<3:
+      return os.lstat(self.lfsdir)
+    realpath=self.realpath(path)
+    return os.lstat(realpath)
 
   def statfs(self):
-    return os.statvfs(self.lfsdb)
+    return os.statvfs(os.path.expanduser('~'))
   
   def readdir (self, path, offset):
     dirents = [ '.', '..' ]
-    exeprepos = path.find(EXECUTE_PREFIX)
-    le_query=""
-    if exeprepos>-1:
-      if not path.find('+')>-1 and not path.find('-')>-1:
-       le_query = path[exeprepos+EXECUTE_PREFIX_LEN:]
+
+    QP_pos = path.find(QUERY_PATH)
+    if QP_pos>-1 and QP_pos<3:
+      query=path[QUERY_PATH_LEN+QP_pos+1:]
+      if query == "":
+        query='R | R>*'
+      else:
+        while query.find('/ /') > -1:
+          query=query.replace('/ /','//')
+      for uri in self.urigraph.query(query):
+        dirents.append(uri)
+
+    elif path != '/':
+      pl = pathlist(path)
+      for child in self.urigraph.query('label:[label:"%s" > *]' % pl[-1]):
+        dirents.append(os.path.basename(uri2path(child)))
+      for child in self.urigraph.query('file:[label:"%s">*]' % ('" > label:"'.join(pl))):
+        dirents.append(os.path.basename(uri2path(child)))
+
     else:
-      le_query = '#^<#* | ~^<#*'
-      if path != '/':
-        pl = pathlist(path)
-        le_query = '~[<"%s"] | #<"%s"' % ('" & <"'.join(pl),pl[-1])
-    for node in self.le.query(le_query):
-      path_of_file=urlparse.urlparse(node['uri'])[2]
-      name=pathlist(path_of_file)[-1]
-      dirents.append(name)
+      childs=set([])
+      for root in self.urigraph.get_roots():
+        dirents.append(os.path.basename(uri2path(root)))
+    
     for r in dirents:
       yield fuse.Direntry(r)
       
   def access(self, path, mode):
-    return os.access(urlparse.urlparse(self.get_uri(path))[2], mode)
+    os.access(self.realpath(path), mode)
   
   def open(self, path, flags):
-    return self.LabelFsFile(urlparse.urlparse(self.get_uri(path))[2], flags)
+    realpath=self.realpath(path)
+    #if realpath == "-1":
+    #  print "open ",path
+    #  file_path = os.path.abspath(path[1:]) #(os.path.expanduser('~'),os.path.basename(path))
+    #  print "file_path",file_path
+    #  file_uri = "file://%s" % file_path
+    #  self.urigraph.create(file_uri)
+    #  self.urigraph.add(pathlist(os.path.dirname(path)), [file_uri])
+    #  return -errno.ENOSYS
+    #else:
+    return self.LabelFsFile(realpath, flags)
       
   def readlink(self, path):
-    return os.readlink(urlparse.urlparse(self.get_uri(path))[2])
+    return os.readlink(self.realpath(path))
   
   def mknod(self, path, mode, dev):
-    pl = pathlist(os.path.dirname(path))
-    nod_path = "%s/%s" % (self.lfsdbdir,os.path.basename(path))
-    uri = "file://%s" % nod_path
-    self.le.create_file(uri)
-    if len(pl)>0:
-      le_query = '+["%s"],["%s"]' % ('" | "'.join(pl),uri)
-      self.le.execute(le_query)
-    os.mknod(nod_path, mode, dev)
-    
+    nod_path = "%s/%s" % (os.path.expanduser('~'),os.path.basename(path))
+    #os.mknod(nod_path, mode, dev)
+    return -errno.ENOENT    
+
   def create(self, path, fi_flags, mode):
-    pl = pathlist(os.path.dirname(path))
-    file_path = "%s/%s" % (self.lfsdbdir,os.path.basename(path))
-    uri = "file://%s" % file_path
-    self.le.create_file(uri)
-    if len(pl)>0:
-      le_query = '+["%s"],["%s"]' % ('" | "'.join(pl),uri)
-      self.le.execute(le_query)
-    f = self.LabelFsFile(file_path, fi_flags, mode)
-    return f
+    print "create ",path, fi_flags, mode
+    file_path = os.path.abspath(path[1:]) #(os.path.expanduser('~'),os.path.basename(path))
+    print "file_path",file_path
+    file_uri = "file://%s" % file_path
+    self.urigraph.create(file_uri)
+    self.urigraph.add(pathlist(os.path.dirname(path)), [file_uri])
+    #return self.LabelFsFile("/dev/null", fi_flags)
   
   def utime(self, path, times):
-    os.utime(urlparse.urlparse(self.get_uri(path))[2], times)
+    os.utime(self.realpath(path), times)
 
   def unlink(self, path):
-    bn = os.path.basename(path)
-    #for node in self.le.query('"%s"' % bn):
-    #  if 'uri' in node:
-    #    if os.path.exists(urlparse.urlparse(self.get_uri(path))[2]): 
-    #      os.unlink(urlparse.urlparse(self.get_uri(path))[2])
-    self.le.delete_node(bn)
+    self.urigraph.delete(self.query_uri(path))
   
   def mkdir(self, path, mode):
-    execute_prefix_position = path.find(EXECUTE_PREFIX)
-    if execute_prefix_position>-1:
-       self.le.execute(path[execute_prefix_position+EXECUTE_PREFIX_LEN:])
+    uri = 'label://%s' % os.path.basename(path)
+    self.urigraph.create(uri)    
+
+    dirname=pathlist(os.path.dirname(path))
+    if len(dirname)>0:
+      self.urigraph.add(dirname,[uri])
     else:
-      uri = os.path.basename(path)
-      pl = pathlist(os.path.dirname(path))
-      self.le.create_label(uri)
-      if len(pl)>0: 
-        le_query = '+["%s"],["%s"]' % ('" | "'.join(pl[-1:]),uri)
-        self.le.execute(le_query)
-      le_query = '+["%s"],[~<"%s"]' % ('" | "'.join(pl),uri)
-      self.le.execute(le_query)
+      self.urigraph.set_root(uri)
       
   def rmdir(self, path):
-    self.le.delete_node(self.get_uri(path))
+    self.urigraph.delete(self.query_uri(path))
 
   def symlink(self, target, link):
-    link_basename = os.path.basename(link)
-    link_path_list = pathlist(os.path.dirname(link))
+    target=os.path.abspath(target)
+    link_dirs=pathlist(os.path.dirname(link))
+    len_link_dirs=len(link_dirs)
     if os.path.isfile(target):
-      target_uri="file://%s" % target
-      self.le.create_file(target_uri)
-      if len(link_path_list)>0:
-        le_query = '+["%s"],["%s"]' % ('" | "'.join(link_path_list),target_uri)
-        self.le.execute(le_query)
+      uri = 'file://%s' % target
+      self.urigraph.create(uri)
+      if len(link_dirs) > 0:
+        self.urigraph.add(link_dirs,[uri])
+      else:
+        self.urigraph.set_root(uri)
     else:
-      for i in range(len(link_path_list)): 
-        self.le.create_label(link_path_list[i])
-        le_query = '+["%s"],["%s"]' % (link_path_list[i-1],link_path_list[i])
-        self.le.execute('+["%s"],["%s"]' % ('" | "'.join(link_path_list[:i]),link_path_list[i]))
-      for root,directory,files in os.walk(target):
-        target_relative_path_list = pathlist(root.replace(target,""))
-        for i in range(len(target_relative_path_list)):
-          self.le.create_label(target_relative_path_list[i])
-          if i > 0:
-            le_query = '+["%s"],["%s"]' % (target_relative_path_list[i-1],target_relative_path_list[i])
-            self.le.execute(le_query)
+      uri="label://%s" % os.path.basename(link)
+      self.urigraph.create(uri)
+      if len(link_dirs) > 0:
+        self.urigraph.add(link_dirs[-1:],[uri])
+      else:
+        self.urigraph.set_root(uri)
+      target_dirname=os.path.dirname(target)
+      for root,dirnames,files in os.walk(target):
+        target_dirs = pathlist(root.replace(target_dirname,""))
+        len_target_dirs = len(target_dirs)
+        for dirname in dirnames:
+          label_uri="label://%s" % dirname
+          self.urigraph.create(label_uri)  
+          if len_target_dirs > 0:
+            self.urigraph.add(target_dirs[-1:], [label_uri])
         for file in files:
           file_uri="file://%s/%s" % (root,file)
-          self.le.create_file(file_uri)
-          le_query = '+["%s"],["%s"]' % ('" | "'.join(relative_path_list),file_uri)
-          self.le.execute(le_query)
+          self.urigraph.create(file_uri)
+          if len_target_dirs > 0:
+            self.urigraph.add(target_dirs,[file_uri])
+          if len_link_dirs > 0:
+            self.urigraph.add(link_dirs,[file_uri])
 
   def link(self, target, link):
-    if os.path.isfile(link):
-      uri = "file://%s" % target
-      self.le.create_file("file://%s" % target)      
-      pl = pathlist(os.path.dirname(link))
-      if len(pl)>0:
-        le_query = '+["%s"],["%s"]' % ('" | "'.join(dl),uri)
-        self.le.execute(le_query)
-          
-  def rename(self, old, new):
-    # TODO: Actualitzar a URIs
-    oldbn = os.path.basename(old)
-    newbn = os.path.basename(new)
-    execute_prefix_position = newbn.find(EXECUTE_PREFIX)
-    if execute_prefix_position>-1:
-      self.le.execute(newbn[execute_prefix_position:])
-      self.le.delete_node(oldbn)
-      if os.path.exists("%s/%s" % (self.lfsdb,oldbn)): 
-        os.rmdir("%s/%s" % (self.lfsdb,oldbn))
-    else:
-      olddn = os.path.dirname(old)
-      newdn = os.path.dirname(new)
-      olddl = pathlist(olddn)
-      newdl = pathlist(newdn)
-      isfileoldbn = self.le.exists_node(oldbn,lfsengine.TYPE_FILE)
-      isfilenewbn = self.le.exists_node(newbn,lfsengine.TYPE_FILE)
-      islabelnewbn = self.le.exists_node(newbn,lfsengine.TYPE_LABEL)
-      if oldbn != newbn:
-        if isfilenewbn:
-          return -errno.ENOENT
-        elif islabelnewbn:
-          le_query = '+["%s"],["%s"] & +[>"%s"],["%s"] & +["%s"],[~<"%s"]' % ('" | "'.join(newdl[-1:]),newbn,oldbn,newbn,newbn,oldbn)
-          self.le.execute(le_query)
-          self.le.delete_node(oldbn)
+    if os.path.isfile(target):
+      uri = 'file://%s' % target
+      self.urigraph.create(uri)
+      self.urigraph.add(pathlist(os.path.dirname(link)),[uri])
+
+  def rename(self,old,new):
+    #TODO: what to do?
+    new_basename = os.path.basename(new)
+    old_dirname = os.path.dirname(old)
+    new_dirname = os.path.dirname(new)
+    old_dirname_list = pathlist(old_dirname)
+    new_dirname_list = pathlist(new_dirname)
+    is_file_old_basename = self.urigraph.exists_file(old_basename)
+    is_file_new_basename = self.urigraph.exists_file(new_basename)
+    is_label_new_basename = self.urigraph.exists_label(new_basename)
+    if old_basename != new_basename:
+      if is_file_new_basename:
+        return -errno.ENOENT
+      elif is_label_new_basename:
+        self.add([],[])
+        le_query = '["%s"]+>["%s"] & ["%s">*]+>["%s"] & +["%s"],[~<"%s"]' % ('" | "'.join(new_dirname_list[-1:]), new_basename, old_basename, new_basename, new_basename, old_basename)
+        self.urigraph.execute(le_query)
+        self.urigraph.delete_node(old_basename)
+      else:
+        self.urigraph.rename_node(old_basename,new_basename)
+    if old_dirname_list != new_dirname_list:
+      if new_dirname == '/':
+        le_query = '["%s"]+>["%s"]' % ('" | "'.join(old_dirname_list[-1:]), new_basename)
+        self.urigraph.execute(le_query)
+      else:
+        if is_file_old_basename:
+          le_query = '["%s"]+>["%s"]' % ('" | "'.join(new_dirname_list),new_basename)
+          self.urigraph.execute(le_query)
         else:
-          self.le.rename_node(oldbn,newbn)
-          # !!Actualitzar les URL
-          # os.rename("%s/%s" % (self.lfsdb,oldbn), "%s/%s" % (self.lfsdb,newbn))
-      if olddl != newdl:
-        if newdn == '/':
-          le_query = '-["%s"],["%s"]' % ('" | "'.join(olddl[-1:]),newbn)
-          self.le.execute(le_query)
-        else:
-          if isfileoldbn:
-            le_query = '+["%s"],["%s"]' % ('" | "'.join(newdl),newbn)
-            self.le.execute(le_query)
-          else:
-            le_query = '+["%s"],["%s"] & +["%s"],[~<"%s"]' % ('" | "'.join(newdl[-1:]),newbn,'" | "'.join(newdl),newbn)
-            self.le.execute(le_query)
+          le_query = '["%s"]+>["%s"] & ["%s"]+>["%s">file:*]' % ('" | "'.join(new_dirname_list[-1:]),new_basename,'" | "'.join(new_dirname_list),new_basename)
+          self.urigraph.execute(le_query)
+
+
+    old_uri=self.urigraph.get_uri(old)
+    self.urigraph.rename(old,new)
+    new_uri=self.urigraph.get_uri(new)
+    if new_uri != old_uri:
+      None
+      #if self.urigraphis file 
+      #os.rename(uri2path(old_uri),uri2path(new_uri)
 
   def chmod(self, path, mode):
-    os.chmod(urlparse.urlparse(self.get_uri(path))[2], mode)
+    os.chmod(self.realpath(path), mode)
 
   def chown(self, path, user, group):
-    os.chown(urlparse.urlparse(self.get_uri(path))[2], user, group)
+    os.chown(self.realpath(path), user, group)
 
   def truncate(self, path, lenght):
-    f = open(urlparse.urlparse(self.get_uri(path))[2], "a")
+    f = open(self.realpath(path), "a")
     f.truncate(lenght)
     f.close()
   
@@ -359,7 +363,12 @@ def main(args):
   if len(args) == 1:
     print usage()
     return -1
-  server = LabelFs(version="%prog " + fuse.__version__,usage=usage(), dash_s_do='setsingle')
+
+  lfsdir="%s/.lfs/" % os.path.expanduser('~')
+  if not os.path.isdir(lfsdir):
+    os.system("mkdir %s" % lfsdir)
+
+  server = LabelFs(version="%prog " + fuse.__version__,usage=usage(), dash_s_do='setsingle',lfsdir=lfsdir)
   return server.main()
 
 if __name__ == '__main__':

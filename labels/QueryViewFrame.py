@@ -54,5 +54,5 @@ class LocationBar(Gtk.Frame):
     self.toolbar=Gtk.Toolbar()
     self.toolbar.set_style(Gtk.ToolbarStyle.TEXT)
     self.toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR)
-    self.add(self.toolbar)   
+    self.add(self.toolbar)
 
