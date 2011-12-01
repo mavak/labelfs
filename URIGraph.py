@@ -66,7 +66,6 @@ class URIGraph():
         self.graph['names'][name][id] = "1"
       self.graph['childs'][id] = {}
       self.graph['parents'][id] = {}
-      print "UGcreate:",uri
 
   def change_uri(self,old_uri,new_uri):
     if old_uri != '' and new_uri != '':
@@ -80,17 +79,13 @@ class URIGraph():
     # TODO. si canvia el basename, canviar self.graph['names']
 
   def get_ids(self,key):
-    print "one"
     if key in self.graph['nodes']:
       yield key
-    print "two"
-    if key in self.graph['uris']:
+    elif key in self.graph['uris']:
       yield self.graph['uris'][key]
-    print "three"
-    if key in self.graph['names']:
+    elif key in self.graph['names']:
       for id in self.graph['names'][key]:
         yield id
-    print "caramba!"
 
   def get_id(self,uri_or_name):
     for id in self.get_ids(uri_or_name):
@@ -140,7 +135,6 @@ class URIGraph():
 
   def set_root(self,uri_or_name):
     for id in self.get_ids(uri_or_name):
-      print "UGset_root",uri_or_name
       self.graph['roots'][id]=1
 
   def unset_root(self,uri_or_name):
@@ -157,7 +151,6 @@ class URIGraph():
       for child_id in self.get_ids(child):
         for parent in parents:
           for parent_id in self.get_ids(parent):
-            print "UGadd",self.graph['nodes'][parent_id],"to",self.graph['nodes'][child_id]
             self.graph['parents'][child_id][parent_id]=1
             self.graph['childs'][parent_id][child_id]=1
 
@@ -173,11 +166,8 @@ class URIGraph():
 
   def get_childs(self,parent):
     for id in self.get_ids(parent):
-      print "id/uri/name",parent,"id=",id
       if id in self.graph['childs']:
-        print "child!!",id
         for child in self.graph['childs'][id]:
-          print "yield",self.graph['nodes'][child]
           yield self.graph['nodes'][child]
 
   def printgraph(self):
@@ -200,7 +190,7 @@ class URIGraph():
     for root in self.graph['roots']:
       print "      ",self.graph['nodes'][root]
 
-# GRAMATICA
+# GRAMMAR
 # expr -> expr | term | expr - term | term
 # term -> term * fact | term & fact | fact
 # fact -> fact > nodes | nodes [+> ->] nodes | nodes
@@ -210,7 +200,8 @@ class Interpreter():
   def __init__(self,urigraph):
     self.urigraph=urigraph
 
-    # Todo: que en les queries se puguen usar tant la key com el value de les reserved_words
+    # TODO: que en les queries se puguen usar tant la key com el value de les reserved_words
+    # FUTURE TODO: descendants
     self.RESERVED_WORDS = {
       'create'       : '@'
       ,'delete'      : 'X'
@@ -219,14 +210,9 @@ class Interpreter():
       ,'unset_root'  : '-R'
       ,'child'   : '>'  # what to do with that? tots els que son fills i pares al mateix temps
       ,'parent'  : '<'
-      
-      # FUTURE TODO: descendants
-
       ,'add'         : '+>'
       ,'remove'      : '->'
-
-      # set operations
-      ,'not'      : '^'
+      ,'not'      : '^'       # set operations
       ,'all'      : '*'
       ,'any'      : '?'
       ,'intersect': '&'
@@ -243,8 +229,6 @@ class Interpreter():
     self._pos=0
     self._length = len(query_str)
     self._query = query_str
-    print "QUERY",query_str
-    print
     self.next_token()
     result = self.expr()
     for key in result:
@@ -305,7 +289,6 @@ class Interpreter():
         return ""
     self._pos = pos
     self.token = token
-    print "TOKEN",token
     return token
 
   def expr(self):
@@ -340,13 +323,11 @@ class Interpreter():
   def fact(self):
     result=set([])
     pre_node_is_all=0
-    print "before  nodes",self.token
     if self.token == self.RESERVED_WORDS['all']:
       self.next_token()
       pre_node_is_all=1
     else:
       pre_nodes = self.nodes()
-    print "after nodes",self.token
     if self.token == self.RESERVED_WORDS['child']:
       self.next_token()
       if self.token == "":

@@ -143,7 +143,7 @@ class LabelFs(fuse.Fuse):
     os.access(self.realpath(path), mode)
   
   def open(self, path, flags):
-    realpath=self.realpath(path)
+    #realpath=self.realpath(path)
     #if realpath == "-1":
     #  print "open ",path
     #  file_path = os.path.abspath(path[1:]) #(os.path.expanduser('~'),os.path.basename(path))
@@ -153,7 +153,7 @@ class LabelFs(fuse.Fuse):
     #  self.urigraph.add(pathlist(os.path.dirname(path)), [file_uri])
     #  return -errno.ENOSYS
     #else:
-    return self.LabelFsFile(realpath, flags)
+    return self.LabelFsFile(self.realpath(path), flags)
       
   def readlink(self, path):
     return os.readlink(self.realpath(path))
@@ -161,12 +161,10 @@ class LabelFs(fuse.Fuse):
   def mknod(self, path, mode, dev):
     nod_path = "%s/%s" % (os.path.expanduser('~'),os.path.basename(path))
     #os.mknod(nod_path, mode, dev)
-    return -errno.ENOENT    
+    #return -errno.ENOENT    
 
   def create(self, path, fi_flags, mode):
-    print "create ",path, fi_flags, mode
     file_path = os.path.abspath(path[1:]) #(os.path.expanduser('~'),os.path.basename(path))
-    print "file_path",file_path
     file_uri = "file://%s" % file_path
     self.urigraph.create(file_uri)
     self.urigraph.add(pathlist(os.path.dirname(path)), [file_uri])

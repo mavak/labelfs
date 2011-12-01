@@ -4,6 +4,7 @@ import xml.sax.saxutils
 
 import Window
 
+#TODO: perhaps FUSE is not the fastest way to perform queries, maybe lfsservice.py?
 
 def pathlist(path):
   return [node for node in path.split('/') if node != ""]
